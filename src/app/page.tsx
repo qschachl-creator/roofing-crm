@@ -1,69 +1,136 @@
-import Image from "next/image";
 import styles from "./page.module.css";
 
 export default function Home() {
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className={styles.page}>
+      <aside className={styles.sidebar}>
+        <div>
+          <p className={styles.eyebrow}>Prism Roofing</p>
+          <h1>Lead Intelligence</h1>
+          <p className={styles.subtle}>Santa Clara County, California</p>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+
+        <nav className={styles.nav} aria-label="Primary">
+          <button className={styles.navActive}>Explore</button>
+          <button>Leads</button>
+          <button>Agent</button>
+          <button disabled>Campaigns · Coming soon</button>
+          <button disabled>Analytics · Coming soon</button>
+        </nav>
+
+        <div className={styles.sourceStatus}>
+          <span className={styles.statusDot} />
+          Oracle dataset connection pending
+        </div>
+      </aside>
+
+      <section className={styles.workspace}>
+        <header className={styles.ader}>
+          <div>
+            <p className={styles.eyebrow}>Territory explorer</p>
+            <h2>Find roofing opportunities</h2>
+          </div>
+          <button className={styles.secondaryButton}>Use my location</button>
+        </header>
+
+        <section className={styles.controls} aria-label="Lead search controls">
+          <label>
+            Search radius
+            <select defaultValue="5">
+              <option value="1">1 mile</option>
+              <option value="3">3 miles</option>
+              <option value="5">5 miles</option>
+              <option value="10">10 miles</option>
+              <option value="25">25 miles</option>
+            </select>
+          </label>
+
+          <label>
+            Minimum roof age
+            <select defaultValue="15">
+              <option value="10">10 years</option>
+              <option value="15">15 years</option>
+              <option value="20">20 years</option>
+              <option value="25">25 years</option>
+            </select>
+          </label>
+
+          <label>
+            Permit status
+            <select defaultValue="open">
+              <option value="open">Open roofing permits</option>
+              <option value="all">All roofing permits</option>
+            </select>
+          </label>
+
+          <button className={styles.primaryButton} disabled>
+            Search properties
+          </button>
+        </section>
+
+        <div className={styles.dashboard}>
+          <section className={styles.mapPanel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.eyebrow}>Map</p>
+                <h3>Santa Clara County</h3>
+              </div>
+              <span className={styles.badge}>Map integration pending</span>
+            </div>
+
+            <div className={styles.mapPlaceholder}>
+              <div className={styles.pin}>+</div>
+              <p>Interactive property map will render here.</p>
+              <span>
+                Pin placement, GPS centering, radius visualization, and property
+                markers will be wired to source-backed Oracle data.
+              </span>
+            </div>
+          </section>
+
+          <aside className={styles.candidatesPanel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.eyebrow}>Candidates</p>
+                <h3>Roofing leads</h3>
+              </div>
+              <span className={styles.count}>0</span>
+            </div>
+
+            <div className={styles.emptyState}>
+              <strong>No search results yet</strong>
+              <p>
+                Candidate properties will appear after a location, radius, and
+                source-backed dataset are connected.
+              </p>
+            </div>
+          </aside>
+        </div>
+
+        <section className={styles.agentPanel}>
+          <div>
+            <p className={styles.eyebrow}>RAG agent</p>
+            <h3>Ask about roofing opportunities</h3>
+            <p className={styles.subtle}>
+              Natural-language queries will retrieve matching property and
+              permit records before generating an answer.
+            </p>
+          </div>
+
+          <div className={styles.agentComposer}>
+            <input
+              aria-label="Ask the roofing intelligence agent"
+              placeholder='e.g. "Show open roofing permits older than five years within five miles"'
+              disabled
             />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            <button disabled>Ask</button>
+          </div>
+
+          <p className={styles.pendingNote}>
+            Agent querying remains disabled until the retrieval layer is wired.
+          </p>
+        </section>
+      </section>
+    </main>
   );
 }
