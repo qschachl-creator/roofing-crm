@@ -1,3 +1,4 @@
+import MapClient from "@/components/MapClient";
 import styles from "./page.module.css";
 
 export default function Home() {
@@ -79,11 +80,10 @@ export default function Home() {
             </div>
 
             <div className={styles.mapPlaceholder}>
-              <div className={styles.pin}>+</div>
-              <p>Interactive property map will render here.</p>
+              <MapClient />
               <span>
-                Pin placement, GPS centering, radius visualization, and property
-                markers will be wired to source-backed Oracle data.
+                Click anywhere on the map to place the current search center.
+                The circle represents the initial 5-mile radius.
               </span>
             </div>
           </section>
