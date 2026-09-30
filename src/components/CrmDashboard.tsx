@@ -9,14 +9,69 @@ type SearchCenter = {
   lng: number;
 };
 
+type ParcelResult = {
+  objectId: string;
+  apn: string;
+  address: string;
+  jurisdiction: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  source: {
+    datasetId: string;
+    datasetUrl: string;
+  };
+};
+
+type ParcelSearchResponse = {
+  search: {
+    latitude: number;
+    longitude: number;
+    radiusMiles: number;
+  };
+  count: number;
+  truncatedAt: number;
+  parcels: ParcelResult[];
+  provenance: {
+    source: string;
+    datasetId: string;
+    geometryFilter: string;
+    note: string;
+  };
+};
+
+type ErrorResponse = {
+  error?: string;
+};
+
 export default function CrmDashboard() {
   const [radiusMiles, setRadiusMiles] = useState(5);
   const [roofAge, setRoofAge] = useState(15);
   const [permitStatus, setPermitStatus] = useState("open");
   const [searchCenter, setSearchCenter] = useState<SearchCenter | null>(null);
+  const [parcels, setParcels] = useState<ParcelResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [locationMessage, setLocationMessage] = useState(
     "Click the map or use your current location."
   );
+
+  function updateSearchCenter(center: SearchCenter) {
+    setSearchCenter(center);
+    setParcels([]);
+    setHasSearched(false);
+    setSearchError(null);
+    setLocationMessage(
+      `Search center: ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`
+    );
+  }
+
+  function updateRadius(value: number) {
+    setRadiusMiles(value);
+    setParcels([]);
+    setHasSearched(false);
+    setSearchError(null);
+  }
 
   function useCurrentLocation() {
     if (!navigator.geolocation) {
@@ -28,7 +83,7 @@ export default function CrmDashboard() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setSearchCenter({
+        updateSearchCenter({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         });
@@ -44,6 +99,46 @@ export default function CrmDashboard() {
         timeout: 10000,
       }
     );
+  }
+
+  async function searchProperties() {
+    if (!searchCenter) {
+      return;
+    }
+
+    setIsSearching(true);
+    setHasSearched(true);
+    setSearchError(null);
+
+    try {
+      const params = new URLSearchParams({
+        lat: String(searchCenter.lat),
+        lng: String(searchCenter.lng),
+        radiusMiles: String(radiusMiles),
+      });
+
+      const response = await fetch(`/api/parcels/search?${params.toString()}`);
+      const payload = (await response.json()) as
+        | ParcelSearchResponse
+        | ErrorResponse;
+
+      if (!response.ok || !("parcels" in payload)) {
+        throw new Error(
+          "error" in payload && payload.error
+            ? payload.error
+            : "Parcel search failed."
+        );
+      }
+
+      setParcels(payload.parcels);
+    } catch (error) {
+      setParcels([]);
+      setSearchError(
+        error instanceof Error ? error.message : "Parcel search failed."
+      );
+    } finally {
+      setIsSearching(false);
+    }
   }
 
   return (
@@ -65,7 +160,7 @@ export default function CrmDashboard() {
 
         <div className={styles.sourceStatus}>
           <span className={styles.statusDot} />
-          Oracle dataset connection pending
+          County GIS connected · Oracle enrichment pending
         </div>
       </aside>
 
@@ -88,7 +183,7 @@ export default function CrmDashboard() {
             Search radius
             <select
               value={radiusMiles}
-              onChange={(event) => setRadiusMiles(Number(event.target.value))}
+              onChange={(event) => updateRadius(Number(event.target.value))}
             >
               <option value="1">1 mile</option>
               <option value="3">3 miles</option>
@@ -122,8 +217,12 @@ export default function CrmDashboard() {
             </select>
           </label>
 
-          <button className={styles.primaryButton} disabled>
-            Search properties
+          <button
+            className={styles.primaryButton}
+            disabled={!searchCenter || isSearching}
+            onClick={searchProperties}
+          >
+            {isSearching ? "Searching…" : "Search properties"}
           </button>
         </section>
 
@@ -141,7 +240,8 @@ export default function CrmDashboard() {
               <MapClient
                 radiusMiles={radiusMiles}
                 searchCenter={searchCenter}
-                onSearchCenterChange={setSearchCenter}
+                parcels={parcels}
+                onSearchCenterChange={updateSearchCenter}
               />
               <span>{locationMessage}</span>
             </div>
@@ -150,23 +250,54 @@ export default function CrmDashboard() {
           <aside className={styles.candidatesPanel}>
             <div className={styles.panelHeader}>
               <div>
-                <p className={styles.eyebrow}>Candidates</p>
-                <h3>Roofing leads</h3>
+                <p className={styles.eyebrow}>Geographic matches</p>
+                <h3>Parcels in radius</h3>
               </div>
-              <span className={styles.count}>0</span>
+              <span className={styles.count}>{parcels.length}</span>
             </div>
 
-            <div className={styles.emptyState}>
-              <strong>No search results yet</strong>
-              <p>
-                Candidate properties will appear once the source-backed Oracle
-                dataset is connected to these filters.
-              </p>
-              <p>
-                Current filters: {roofAge}+ year roofs ·{" "}
-                {permitStatus === "open" ? "open permits" : "all permits"}
-              </p>
-            </div>
+            <p className={styles.candidateNotice}>
+              County GIS determines geographic matches. Roof age and permit
+              filters are not applied until Oracle and permit enrichment are
+              connected.
+            </p>
+
+            {searchError ? (
+              <div className={styles.emptyState}>
+                <strong>Search unavailable</strong>
+                <p>{searchError}</p>
+              </div>
+            ) : parcels.length > 0 ? (
+              <div className={styles.candidateList}>
+                {parcels.map((parcel) => (
+                  <article className={styles.candidateCard} key={parcel.objectId}>
+                    <div className={styles.candidateCardHeader}>
+                      <strong>{parcel.address || "Address unavailable"}</strong>
+                      <span>APN {parcel.apn}</span>
+                    </div>
+                    <p>
+                      {parcel.jurisdiction || "Jurisdiction unavailable"} ·
+                      OBJECTID {parcel.objectId}
+                    </p>
+                    <div className={styles.candidateMeta}>
+                      <span>Roof age: pending enrichment</span>
+                      <span>Permit status: pending enrichment</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.emptyState}>
+                <strong>
+                  {hasSearched ? "No parcels returned" : "No search results yet"}
+                </strong>
+                <p>
+                  {hasSearched
+                    ? "Try another search center or radius."
+                    : "Choose a map location or use GPS, then search the county parcel dataset."}
+                </p>
+              </div>
+            )}
           </aside>
         </div>
 
@@ -186,7 +317,7 @@ export default function CrmDashboard() {
               placeholder='e.g. "Show open roofing permits older than five years within five miles"'
               disabled
             />
-           <button disabled>Ask</button>
+            <button disabled>Ask</button>
           </div>
 
           <p className={styles.pendingNote}>

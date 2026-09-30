@@ -3,9 +3,11 @@
 import { useEffect } from "react";
 import {
   Circle,
+  CircleMarker,
   MapContainer,
   Marker,
   TileLayer,
+  Tooltip,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -68,6 +70,7 @@ function RecenterMap({
 export default function PropertyMap({
   radiusMiles,
   searchCenter,
+  parcels,
   onSearchCenterChange,
 }: MapClientProps) {
   const radiusMeters = radiusMiles * 1609.344;
@@ -82,7 +85,7 @@ export default function PropertyMap({
       }}
     >
       <MapContainer
-      center={SANTA_CLARA_CENTER}
+        center={SANTA_CLARA_CENTER}
         zoom={10}
         style={{ height: "100%", width: "100%" }}
       >
@@ -112,6 +115,32 @@ export default function PropertyMap({
             />
           </>
         ) : null}
+
+        {parcels.map((parcel) => {
+          if (parcel.latitude === null || parcel.longitude === null) {
+            return null;
+          }
+
+          return (
+            <CircleMarker
+              key={parcel.objectId}
+              center={[parcel.latitude, parcel.longitude]}
+              radius={5}
+              pathOptions={{
+                color: "#334155",
+                fillColor: "#ffffff",
+                fillOpacity: 0.9,
+                weight: 2,
+              }}
+            >
+              <Tooltip>
+                <strong>APN {parcel.apn}</strong>
+                <br />
+                {parcel.address || "Address unavailable"}
+              </Tooltip>
+            </CircleMarker>
+          );
+        })}
       </MapContainer>
     </div>
   );

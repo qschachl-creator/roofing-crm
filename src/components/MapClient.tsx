@@ -7,9 +7,18 @@ export type SearchCenter = {
   lng: number;
 };
 
+export type ParcelMapPoint = {
+  objectId: string;
+  apn: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
 export type MapClientProps = {
   radiusMiles: number;
   searchCenter: SearchCenter | null;
+  parcels: ParcelMapPoint[];
   onSearchCenterChange: (center: SearchCenter) => void;
 };
 
