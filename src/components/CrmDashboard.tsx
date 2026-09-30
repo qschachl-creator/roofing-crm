@@ -39,9 +39,42 @@ type ParcelSearchResponse = {
   };
 };
 
+type RoofingPermit = {
+  apn: string;
+  permitNumber: string;
+  description: string | null;
+  status: string | null;
+  issueDate: string | null;
+  finalDate: string | null;
+  contractorName: string | null;
+  applicantName: string | null;
+  address: string | null;
+  estimatedValue: number | null;
+  layerId: number;
+  layerName: string;
+  sourceUrl: string;
+};
+
+type PermitSearchResponse = {
+  count: number;
+  permits: RoofingPermit[];
+};
+
 type ErrorResponse = {
   error?: string;
 };
+
+function permitAgeYears(issueDate: string | null) {
+  if (!issueDate) return null;
+
+  const issued = new Date(`${issueDate}T00:00:00Z`);
+  if (Number.isNaN(issued.valueOf())) return null;
+
+  return Math.max(
+    0,
+    (Date.now() - issued.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+  );
+}
 
 export default function CrmDashboard() {
   const [activeSection, setActiveSection] = useState<
@@ -49,9 +82,11 @@ export default function CrmDashboard() {
   >("explore");
   const [radiusMiles, setRadiusMiles] = useState(5);
   const [roofAge, setRoofAge] = useState(15);
-  const [permitStatus, setPermitStatus] = useState("open");
+  const [permitStatus, setPermitStatus] = useState<"open" | "all">("open");
   const [searchCenter, setSearchCenter] = useState<SearchCenter | null>(null);
   const [parcels, setParcels] = useState<ParcelResult[]>([]);
+  const [roofingPermits, setRoofingPermits] = useState<RoofingPermit[]>([]);
+  const [permitError, setPermitError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -70,6 +105,8 @@ export default function CrmDashboard() {
   function updateSearchCenter(center: SearchCenter) {
     setSearchCenter(center);
     setParcels([]);
+    setRoofingPermits([]);
+    setPermitError(null);
     setHasSearched(false);
     setSearchError(null);
     setLocationMessage(
@@ -80,6 +117,8 @@ export default function CrmDashboard() {
   function updateRadius(value: number) {
     setRadiusMiles(value);
     setParcels([]);
+    setRoofingPermits([]);
+    setPermitError(null);
     setHasSearched(false);
     setSearchError(null);
   }
@@ -120,6 +159,8 @@ export default function CrmDashboard() {
     setIsSearching(true);
     setHasSearched(true);
     setSearchError(null);
+    setPermitError(null);
+    setRoofingPermits([]);
 
     try {
       const params = new URLSearchParams({
@@ -142,6 +183,48 @@ export default function CrmDashboard() {
       }
 
       setParcels(payload.parcels);
+
+      const sanJoseApns = payload.parcels
+        .filter(
+          (parcel) =>
+            parcel.jurisdiction?.trim().toUpperCase() === "SAN JOSE"
+        )
+        .map((parcel) => parcel.apn);
+
+      if (sanJoseApns.length > 0) {
+        try {
+          const permitResponse = await fetch("/api/permits/search", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              apns: sanJoseApns,
+              permitStatus,
+            }),
+          });
+
+          const permitPayload = (await permitResponse.json()) as
+            | PermitSearchResponse
+            | ErrorResponse;
+
+          if (!permitResponse.ok || !("permits" in permitPayload)) {
+            throw new Error(
+              "error" in permitPayload && permitPayload.error
+                ? permitPayload.error
+                : "Permit enrichment failed."
+            );
+          }
+
+          setRoofingPermits(permitPayload.permits);
+        } catch (permitFailure) {
+          setPermitError(
+            permitFailure instanceof Error
+              ? permitFailure.message
+              : "Permit enrichment failed."
+          );
+        }
+      }
     } catch (error) {
       setParcels([]);
       setSearchError(
@@ -236,7 +319,9 @@ export default function CrmDashboard() {
             Permit status
             <select
               value={permitStatus}
-              onChange={(event) => setPermitStatus(event.target.value)}
+              onChange={(event) =>
+                setPermitStatus(event.target.value as "open" | "all")
+              }
             >
               <option value="open">Open roofing permits</option>
               <option value="all">All roofing permits</option>
@@ -288,10 +373,17 @@ export default function CrmDashboard() {
             </div>
 
             <p className={styles.candidateNotice}>
-              County GIS determines geographic matches. Roof age and permit
-              filters are not applied until Oracle and permit enrichment are
-              connected.
+              County GIS determines geographic matches. San Jose roofing
+              permits are enriched from the city&apos;s ArcGIS source using APN.
+              Roof-age filtering remains pending source-backed enrichment.
             </p>
+
+            {permitError ? (
+              <p className={styles.candidateNotice}>
+                Parcel search succeeded, but permit enrichment is unavailable:
+                {" "}{permitError}
+              </p>
+            ) : null}
 
             {searchError ? (
               <div className={styles.emptyState}>
@@ -300,22 +392,64 @@ export default function CrmDashboard() {
               </div>
             ) : parcels.length > 0 ? (
               <div className={styles.candidateList}>
-                {parcels.map((parcel) => (
-                  <article className={styles.candidateCard} key={parcel.objectId}>
-                    <div className={styles.candidateCardHeader}>
-                      <strong>{parcel.address || "Address unavailable"}</strong>
-                      <span>APN {parcel.apn}</span>
-                    </div>
-                    <p>
-                      {parcel.jurisdiction || "Jurisdiction unavailable"} ·
-                      OBJECTID {parcel.objectId}
-                    </p>
-                    <div className={styles.candidateMeta}>
-                      <span>Roof age: pending enrichment</span>
-                      <span>Permit status: pending enrichment</span>
-                    </div>
-                  </article>
-                ))}
+                {parcels.map((parcel) => {
+                  const permits = roofingPermits.filter(
+                    (permit) => permit.apn === parcel.apn
+                  );
+
+                  return (
+                    <article
+                      className={styles.candidateCard}
+                     key={parcel.objectId}
+                    >
+                      <div className={styles.candidateCardHeader}>
+                        <strong>
+                          {parcel.address || "Address unavailable"}
+                        </strong>
+                        <span>APN {parcel.apn}</span>
+                      </div>
+
+                      <p>
+                        {parcel.jurisdiction || "Jurisdiction unavailable"} ·
+                        OBJECTID {parcel.objectId}
+                      </p>
+
+                      <div className={styles.candidateMeta}>
+                        <span>Roof age: pending source enrichment</span>
+
+                        {permits.length === 0 ? (
+                          <span>
+                            Roofing permit: none returned for selected filter
+                          </span>
+                        ) : (
+                          permits.map((permit) => {
+                            const age = permitAgeYears(permit.issueDate);
+                            const longOpen =
+                              !permit.finalDate && age !== null && age >= 5;
+
+                            return (
+                              <span key={permit.permitNumber}>
+                                <strong>{permit.permitNumber}</strong>
+                                {" · "}
+                                {permit.status || permit.layerName}
+                                {permit.issueDate
+                                  ? ` · issued ${permit.issueDate}`
+                                  : ""}
+                                {age !== null
+                                  ? ` · ${age.toFixed(1)} years since issue`
+                                  : ""}
+                                {longOpen ? " · long-open" : ""}
+                                {permit.contractorName
+                                  ? ` · contractor source: ${permit.contractorName}`
+                                  : ""}
+                              </span>
+                            );
+                          })
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             ) : (
               <div className={styles.emptyState}>
