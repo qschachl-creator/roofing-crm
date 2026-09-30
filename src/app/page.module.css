@@ -380,3 +380,236 @@ input:disabled {
   outline-offset: 3px;
   box-shadow: 0 10px 30px rgba(23, 32, 42, 0.12);
 }
+
+
+/* === CRM POLISH V1 START === */
+
+.page {
+  grid-template-columns: 220px minmax(0, 1fr);
+  background: #f6f7f9;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  min-height: 0;
+  padding: 24px 18px;
+}
+
+.sidebar h1 {
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.nav button,
+.primaryButton,
+.secondaryButton,
+.agentComposer button {
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.nav button:not(:disabled) {
+  cursor: pointer;
+}
+
+.nav button:not(:disabled):hover {
+  background: #202b36;
+  color: #ffffff;
+}
+
+.workspace {
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.header {
+  margin-bottom: 18px;
+}
+
+.header h2 {
+  font-size: 26px;
+}
+
+.controls {
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border-color: #e4e7eb;
+  box-shadow: 0 1px 3px rgba(23, 32, 42, 0.04);
+}
+
+.controls select {
+  height: 40px;
+}
+
+.primaryButton:not(:disabled),
+.secondaryButton {
+  cursor: pointer;
+}
+
+.primaryButton:not(:disabled):hover,
+.agentComposer button:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px rgba(17, 24, 32, 0.15);
+}
+
+.secondaryButton:hover {
+  background: #f7f8fa;
+  border-color: #bcc5ce;
+}
+
+.dashboard {
+  gap: 16px;
+}
+
+.mapPanel,
+.candidatesPanel,
+.agentPanel {
+  border-color: #e4e7eb;
+  box-shadow: 0 2px 8px rgba(23, 32, 42, 0.04);
+}
+
+.mapPanel,
+.candidatesPanel {
+  min-height: 0;
+  padding: 16px;
+}
+
+.mapPlaceholder {
+  min-height: 0;
+  margin-top: 14px;
+  padding: 8px;
+  display: block;
+  border: 0;
+  background: #f2f4f6;
+  text-align: left;
+}
+
+.mapPlaceholder > span {
+  display: block;
+  max-width: none;
+  padding: 10px 6px 4px;
+  text-align: center;
+}
+
+.candidateNotice {
+  margin: 12px 0;
+  padding: 9px 10px;
+}
+
+.candidateList {
+  max-height: 410px;
+  gap: 8px;
+}
+
+.candidateCard {
+  padding: 10px 11px;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.candidateCard:hover {
+  border-color: #bcc5ce;
+  box-shadow: 0 3px 10px rgba(23, 32, 42, 0.06);
+  transform: translateY(-1px);
+}
+
+.candidateCardHeader strong {
+  font-size: 12px;
+}
+
+.agentPanel {
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.sectionFocus {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(23, 32, 42, 0.18),
+    0 8px 24px rgba(23, 32, 42, 0.08);
+}
+
+@media (max-width: 980px) {
+  .page {
+    display: block;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    min-height: auto;
+    padding: 16px 18px;
+    gap: 14px;
+  }
+
+  .sidebar > div:first-child h1 {
+    margin-bottom: 0;
+  }
+
+  .nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .nav button {
+    width: auto;
+    padding: 8px 11px;
+  }
+
+  .sourceStatus {
+    margin-top: 2px;
+  }
+
+  .workspace {
+    padding: 18px;
+  }
+
+  .controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .primaryButton {
+    min-height: 40px;
+  }
+
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .header {
+    gap: 12px;
+  }
+
+  .header h2 {
+    font-size: 23px;
+  }
+
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  .mapPanel,
+  .candidatesPanel,
+  .agentPanel {
+    border-radius: 10px;
+  }
+
+  .candidateList {
+    max-height: 340px;
+  }
+}
+
+/* === CRM POLISH V1 END === */
