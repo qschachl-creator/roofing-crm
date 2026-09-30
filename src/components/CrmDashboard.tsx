@@ -44,6 +44,9 @@ type ErrorResponse = {
 };
 
 export default function CrmDashboard() {
+  const [activeSection, setActiveSection] = useState<
+    "explore" | "leads" | "agent"
+  >("explore");
   const [radiusMiles, setRadiusMiles] = useState(5);
   const [roofAge, setRoofAge] = useState(15);
   const [permitStatus, setPermitStatus] = useState("open");
@@ -55,6 +58,14 @@ export default function CrmDashboard() {
   const [locationMessage, setLocationMessage] = useState(
     "Click the map or use your current location."
   );
+
+  function navigateToSection(section: "explore" | "leads" | "agent") {
+    setActiveSection(section);
+    document.getElementById(section)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
 
   function updateSearchCenter(center: SearchCenter) {
     setSearchCenter(center);
@@ -151,9 +162,24 @@ export default function CrmDashboard() {
         </div>
 
         <nav className={styles.nav} aria-label="Primary">
-          <button className={styles.navActive}>Explore</button>
-          <button>Leads</button>
-          <button>Agent</button>
+          <button
+            className={activeSection === "explore" ? styles.navActive : undefined}
+            onClick={() => navigateToSection("explore")}
+          >
+            Explore
+          </button>
+          <button
+            className={activeSection === "leads" ? styles.navActive : undefined}
+            onClick={() => navigateToSection("leads")}
+          >
+            Leads
+          </button>
+          <button
+            className={activeSection === "agent" ? styles.navActive : undefined}
+            onClick={() => navigateToSection("agent")}
+          >
+            Agent
+          </button>
           <button disabled>Campaigns · Coming soon</button>
           <button disabled>Analytics · Coming soon</button>
         </nav>
@@ -164,7 +190,7 @@ export default function CrmDashboard() {
         </div>
       </aside>
 
-      <section className={styles.workspace}>
+      <section className={styles.workspace} id="explore">
         <header className={styles.header}>
           <div>
             <p className={styles.eyebrow}>Territory explorer</p>
@@ -247,7 +273,12 @@ export default function CrmDashboard() {
             </div>
           </section>
 
-          <aside className={styles.candidatesPanel}>
+          <aside
+            className={`${styles.candidatesPanel} ${
+              activeSection === "leads" ? styles.sectionFocus : ""
+            }`}
+            id="leads"
+          >
             <div className={styles.panelHeader}>
               <div>
                 <p className={styles.eyebrow}>Geographic matches</p>
@@ -301,7 +332,7 @@ export default function CrmDashboard() {
           </aside>
         </div>
 
-        <section className={styles.agentPanel}>
+        <section className={styles.agentPanel} id="agent">
           <div>
             <p className={styles.eyebrow}>RAG agent</p>
             <h3>Ask about roofing opportunities</h3>
