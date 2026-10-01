@@ -3,13 +3,17 @@
 import { useState, useSyncExternalStore } from "react";
 import MapClient from "./MapClient";
 import styles from "@/app/page.module.css";
-import { answerRoofingQuestion } from "@/lib/agentQuery";
+import {
+  answerRoofingQuestion,
+  questionSearchPlace,
+} from "@/lib/agentQuery";
 import {
   apnBatches,
   isLongOpenPermit,
   parcelsForPermitStatus,
   permitAgeYears,
   selectedParcelPermitView,
+  sortParcelsLongOpenFirst,
 } from "@/lib/candidateList";
 import {
   installRoofAgeSnapshot,
@@ -97,6 +101,9 @@ export default function CrmDashboard({
   const [radiusMiles, setRadiusMiles] = useState(5);
   const [roofAge, setRoofAge] = useState(15);
   const [permitStatus, setPermitStatus] = useState<"open" | "all">("open");
+  const [minimumOpenYears, setMinimumOpenYears] = useState<number | null>(
+    null
+  );
   const [searchCenter, setSearchCenter] = useState<SearchCenter | null>(null);
   const [parcels, setParcels] = useState<ParcelResult[]>([]);
   const [roofingPermits, setRoofingPermits] = useState<RoofingPermit[]>([]);
@@ -121,16 +128,35 @@ export default function CrmDashboard({
   );
   installRoofAgeSnapshot(roofAgeByApn);
   const roofAgeMatches = parcelsMeetingMinimumRoofAge(parcels, roofAge);
-  const listedParcels = parcelsForPermitStatus(
+  const permitListed = parcelsForPermitStatus(
     roofAgeMatches,
     roofingPermits,
-    permitStatus
+    permitStatus,
+    parcels,
+    minimumOpenYears
+  );
+  const listedBeforeDuration = parcelsForPermitStatus(
+    roofAgeMatches,
+    roofingPermits,
+    permitStatus,
+    parcels,
+    null
+  );
+  const listedParcels = sortParcelsLongOpenFirst(
+    permitListed,
+    roofingPermits
   );
   const narrowedByOpenPermits =
     hasSearched &&
     permitStatus === "open" &&
+    minimumOpenYears === null &&
     roofAgeMatches.length > 0 &&
-    listedParcels.length === 0;
+    permitListed.length === 0;
+  const narrowedByDuration =
+    hasSearched &&
+    minimumOpenYears !== null &&
+    listedBeforeDuration.length > 0 &&
+    permitListed.length === 0;
   const selectedParcel = selectedObjectId
     ? (listedParcels.find((parcel) => parcel.objectId === selectedObjectId) ??
       null)
@@ -209,7 +235,7 @@ export default function CrmDashboard({
     if (apns.length === 0) {
       setRoofingPermits([]);
       setPermitError(null);
-      return;
+      return { permits: [] as RoofingPermit[], error: null as string | null };
     }
 
     try {
@@ -241,15 +267,18 @@ export default function CrmDashboard({
         })
       );
 
-      setRoofingPermits(batches.flat());
+      const permits = batches.flat();
+      setRoofingPermits(permits);
       setPermitError(null);
+      return { permits, error: null as string | null };
     } catch (permitFailure) {
-      setRoofingPermits([]);
-      setPermitError(
+      const message =
         permitFailure instanceof Error
           ? permitFailure.message
-          : "Permit enrichment failed."
-      );
+          : "Permit enrichment failed.";
+      setRoofingPermits([]);
+      setPermitError(message);
+      return { permits: [] as RoofingPermit[], error: message };
     }
   }
 
@@ -278,7 +307,39 @@ export default function CrmDashboard({
     setActiveSection("leads");
   }
 
-  function askAgent() {
+  async function askAgent() {
+    const place = questionSearchPlace(agentQuestion);
+    setActiveSection("agent");
+
+    if (place.kind === "known") {
+      const miles = place.radiusMiles ?? radiusMiles;
+      const center = { lat: place.lat, lng: place.lng };
+      setSearchCenter(center);
+      setRadiusMiles(miles);
+      setLocationMessage(
+        `Search center: ${place.name} · ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`
+      );
+      const loaded = await searchProperties(center, miles);
+      if (!loaded.ok) {
+        setAgentAnswer({
+          answer: loaded.error ?? "Parcel search failed.",
+          matches: [],
+        });
+        return;
+      }
+
+      setAgentAnswer(
+        answerRoofingQuestion(agentQuestion, {
+          parcels: loaded.parcels,
+          permits: loaded.permits,
+          radiusMiles: miles,
+          hasSearched: true,
+          permitError: loaded.permitError,
+        })
+      );
+      return;
+    }
+
     setAgentAnswer(
       answerRoofingQuestion(agentQuestion, {
         parcels,
@@ -288,12 +349,21 @@ export default function CrmDashboard({
         permitError,
       })
     );
-    setActiveSection("agent");
   }
 
-  async function searchProperties() {
-    if (!searchCenter) {
-      return;
+  async function searchProperties(
+    center: SearchCenter | null = searchCenter,
+    miles = radiusMiles
+  ) {
+    if (!center) {
+      return {
+        ok: false,
+        error:
+          "Choose a map location or use GPS, then search the county parcel dataset.",
+        parcels: [] as ParcelResult[],
+        permits: [] as RoofingPermit[],
+        permitError: null as string | null,
+      };
     }
 
     setIsSearching(true);
@@ -305,9 +375,9 @@ export default function CrmDashboard({
 
     try {
       const params = new URLSearchParams({
-        lat: String(searchCenter.lat),
-        lng: String(searchCenter.lng),
-        radiusMiles: String(radiusMiles),
+        lat: String(center.lat),
+        lng: String(center.lng),
+        radiusMiles: String(miles),
       });
 
       const response = await fetch(`/api/parcels/search?${params.toString()}`);
@@ -326,13 +396,30 @@ export default function CrmDashboard({
       setParcels(payload.parcels);
       setMapTruncated(payload.truncated);
       setMapPageLimit(payload.pageLimit);
-      await loadPermits(sanJoseApnsFrom(payload.parcels), permitStatus);
+      const loadedPermits = await loadPermits(
+        sanJoseApnsFrom(payload.parcels),
+        permitStatus
+      );
+      return {
+        ok: true,
+        error: null,
+        parcels: payload.parcels,
+        permits: loadedPermits.permits,
+        permitError: loadedPermits.error,
+      };
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Parcel search failed.";
       setParcels([]);
       setMapTruncated(false);
-      setSearchError(
-        error instanceof Error ? error.message : "Parcel search failed."
-      );
+      setSearchError(message);
+      return {
+        ok: false,
+        error: message,
+        parcels: [] as ParcelResult[],
+        permits: [] as RoofingPermit[],
+        permitError: null as string | null,
+      };
     } finally {
       setIsSearching(false);
     }
@@ -434,10 +521,31 @@ export default function CrmDashboard({
             </select>
           </label>
 
+          <label>
+            Open duration
+            <select
+              aria-label="Open duration"
+              value={minimumOpenYears === null ? "any" : String(minimumOpenYears)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setMinimumOpenYears(value === "any" ? null : Number(value));
+                setSelectedObjectId(null);
+              }}
+            >
+              <option value="any">Any</option>
+              <option value="5">5 years</option>
+              <option value="10">10 years</option>
+              <option value="15">15 years</option>
+              <option value="20">20 years</option>
+            </select>
+          </label>
+
           <button
             className={styles.primaryButton}
             disabled={!searchCenter || isSearching}
-            onClick={searchProperties}
+            onClick={() => {
+              void searchProperties();
+            }}
           >
             {isSearching ? "Searching…" : "Search properties"}
           </button>
@@ -495,8 +603,9 @@ export default function CrmDashboard({
             <p className={styles.candidateNotice}>
               County GIS determines geographic matches. San Jose roofing
               permits are enriched from the city&apos;s ArcGIS source using APN.
-              This list keeps parcels whose Oracle roof-age snapshot meets the
-              selected minimum. Parcels without a roof age are omitted.
+              Open roofing permits lists every parcel in this radius with a
+              returned open permit, including parcels below the roof-age
+              minimum. All roofing permits keeps the roof-age minimum.
             </p>
 
             {activeSection === "leads" ? (
@@ -639,18 +748,22 @@ export default function CrmDashboard({
                   {hasSearched
                     ? narrowedByOpenPermits
                       ? "Open permits hid these completed roofs"
-                      : parcels.length > 0
-                        ? "No parcels meet the minimum roof age"
-                        : "No parcels returned"
+                      : narrowedByDuration
+                        ? `No permit has been open at least ${minimumOpenYears} years`
+                        : parcels.length > 0
+                          ? "No parcels meet the minimum roof age"
+                          : "No parcels returned"
                     : "No search results yet"}
                 </strong>
                 <p>
                   {hasSearched
                     ? narrowedByOpenPermits
                       ? "These roofs have completed permits, so Open roofing permits hides them. Choose All roofing permits to see them."
-                      : parcels.length > 0
-                        ? "None of the parcels in this radius have a snapshot roof age at least as old as the selected minimum."
-                        : "Try another search center or radius."
+                      : narrowedByDuration
+                        ? "A parcel stays listed only when one of its permits has no final date and has been open at least that many years."
+                        : parcels.length > 0
+                          ? "None of the parcels in this radius have a snapshot roof age at least as old as the selected minimum."
+                          : "Try another search center or radius."
                     : "Choose a map location or use GPS, then search the county parcel dataset."}
                 </p>
               </div>

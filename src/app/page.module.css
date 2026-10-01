@@ -110,7 +110,7 @@
 
 .controls {
   display: grid;
-  grid-template-columns: repeat(3, minmax(140px, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto;
   gap: 12px;
   margin-bottom: 20px;
   padding: 16px;

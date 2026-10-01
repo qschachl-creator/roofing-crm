@@ -10,6 +10,7 @@ import {
   parcelsForPermitStatus,
   permitAgeYears,
   selectedParcelPermitView,
+  sortParcelsLongOpenFirst,
 } from "../src/lib/candidateList.ts";
 import {
   installRoofAgeSnapshot,
@@ -50,27 +51,22 @@ function permitRow(apn, issueDate, finalDate) {
   };
 }
 
-test("open permit status drops permit-less roof-age parcels and all keeps them", () => {
-  const aged = Object.entries(snapshot.parcels)
-    .filter(
-      ([, row]) =>
-        typeof row.roof_age_years === "number" && row.roof_age_years >= 15
-    )
-    .map(([apn]) => apn);
-  const withoutPermit = aged.find((apn) => apn !== "67620085");
+const FINISHED_ROOFS = [
+  "46204039",
+  "49454036",
+  "56904039",
+  "56934012",
+  "67620085",
+];
 
-  assert.ok(aged.includes("67620085"));
-  assert.ok(withoutPermit);
-
+test("open permit status keeps open permits without a roof age and all keeps roof-age matches", () => {
   const parcels = [
-    { apn: "67620085", address: "old roof with permit" },
-    { apn: "09241022", address: "new roof with permit" },
-    { apn: withoutPermit, address: "old roof without permit" },
-    { apn: "68958007", address: "no anchor with permit" },
+    ...FINISHED_ROOFS.map((apn) => ({ apn, address: `finished ${apn}` })),
+    { apn: "09241022", address: "new roof with open permit" },
+    { apn: "68958007", address: "no roof age with open permit" },
   ];
   const permits = [
-    permitRow("67620085", "2018-06-01", null),
-    permitRow("09241022", "2026-01-01", null),
+    permitRow("09241022", "2024-06-01", null),
     permitRow("68958007", "2015-01-01", null),
   ];
 
@@ -78,20 +74,36 @@ test("open permit status drops permit-less roof-age parcels and all keeps them",
   const openListed = parcelsForPermitStatus(
     roofAgeMatches,
     permits,
-    "open"
+    "open",
+    parcels
   );
-  const allListed = parcelsForPermitStatus(roofAgeMatches, permits, "all");
+  const allListed = parcelsForPermitStatus(
+    roofAgeMatches,
+    permits,
+    "all",
+    parcels
+  );
 
   assert.deepEqual(
-    openListed.map((parcel) => parcel.apn),
-    ["67620085"]
+    roofAgeMatches.map((parcel) => parcel.apn).sort(),
+    [...FINISHED_ROOFS].sort()
   );
   assert.deepEqual(
-    allListed.map((parcel) => parcel.apn),
-    ["67620085", withoutPermit]
+    openListed.map((parcel) => parcel.apn).sort(),
+    ["09241022", "68958007"]
   );
+  for (const apn of FINISHED_ROOFS) {
+    assert.equal(
+      openListed.some((parcel) => parcel.apn === apn),
+      false
+    );
+    assert.equal(
+      allListed.some((parcel) => parcel.apn === apn),
+      true
+    );
+  }
   assert.equal(
-    openListed.some((parcel) => parcel.apn === withoutPermit),
+    allListed.some((parcel) => parcel.apn === "09241022"),
     false
   );
   assert.equal(meetsMinimumRoofAge("67620085", 15), true);
@@ -108,7 +120,75 @@ test("open permit status drops permit-less roof-age parcels and all keeps them",
   );
   assert.match(
     dashboardSource,
-    /parcelsForPermitStatus\(\s*roofAgeMatches,\s*roofingPermits,\s*permitStatus\s*\)/
+    /parcelsForPermitStatus\(\s*roofAgeMatches,\s*roofingPermits,\s*permitStatus,\s*parcels,\s*minimumOpenYears\s*\)/
+  );
+});
+
+test("long-open parcels sort before other parcels", () => {
+  const parcels = [
+    { apn: "recent-open", address: "recent" },
+    { apn: "long-open", address: "long" },
+    { apn: "closed-old", address: "closed" },
+  ];
+  const permits = [
+    permitRow("recent-open", "2024-06-01", null),
+    permitRow("long-open", "2010-01-01", null),
+    permitRow("closed-old", "2010-01-01", "2012-01-01"),
+  ];
+
+  assert.deepEqual(
+    sortParcelsLongOpenFirst(parcels, permits, NOW).map((parcel) => parcel.apn),
+    ["long-open", "recent-open", "closed-old"]
+  );
+  assert.equal(
+    sortParcelsLongOpenFirst(parcels, permits, NOW).some((parcel) =>
+      FINISHED_ROOFS.includes(parcel.apn)
+    ),
+    false
+  );
+  assert.match(
+    dashboardSource,
+    /sortParcelsLongOpenFirst\(\s*permitListed,\s*roofingPermits\s*\)/
+  );
+});
+
+test("duration minimum uses no final date and years since issue", () => {
+  const parcels = [
+    { apn: "long-open", address: "long" },
+    { apn: "recent-open", address: "recent" },
+    { apn: "closed-old", address: "closed" },
+    { apn: "aged-no-permit", address: "aged" },
+  ];
+  const permits = [
+    permitRow("long-open", "2010-01-01", null),
+    permitRow("recent-open", "2024-06-01", null),
+    permitRow("closed-old", "2010-01-01", "2012-01-01"),
+  ];
+  const longAge = permitAgeYears("2010-01-01", NOW);
+  const recentAge = permitAgeYears("2024-06-01", NOW);
+
+  assert.equal(longAge !== null && longAge >= 5, true);
+  assert.equal(recentAge !== null && recentAge < 5, true);
+  assert.equal(isLongOpenPermit(null, longAge), true);
+  assert.equal(isLongOpenPermit("2012-01-01", longAge), false);
+
+  assert.deepEqual(
+    parcelsForPermitStatus(parcels, permits, "all", parcels, null, NOW).map(
+      (parcel) => parcel.apn
+    ),
+    ["long-open", "recent-open", "closed-old", "aged-no-permit"]
+  );
+  assert.deepEqual(
+    parcelsForPermitStatus(parcels, permits, "open", parcels, 5, NOW).map(
+      (parcel) => parcel.apn
+    ),
+    ["long-open"]
+  );
+  assert.deepEqual(
+    parcelsForPermitStatus(parcels, permits, "all", parcels, 5, NOW).map(
+      (parcel) => parcel.apn
+    ),
+    ["long-open"]
   );
 });
 
@@ -234,4 +314,21 @@ test("permit search contract stays apns and open or all", () => {
     dashboardSource,
     /Choose All roofing permits to see them/
   );
+
+  const duration = dashboardSource.match(/Open duration[\s\S]*?<\/select>/);
+  assert.ok(duration);
+  assert.deepEqual(
+    [...duration[0].matchAll(/<option value="([^"]+)">([^<]*)<\/option>/g)].map(
+      (entry) => [entry[1], entry[2]]
+    ),
+    [
+      ["any", "Any"],
+      ["5", "5 years"],
+      ["10", "10 years"],
+      ["15", "15 years"],
+      ["20", "20 years"],
+    ]
+  );
+  assert.match(dashboardSource, /useState<number \| null>\(\s*null\s*\)/);
+  assert.equal(dashboardSource.includes("minimumOpenYears:"), false);
 });

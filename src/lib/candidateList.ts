@@ -24,16 +24,67 @@ export function apnBatches(apns: readonly string[], size = 100) {
   return batches;
 }
 
+type ListedPermit = {
+  apn: string;
+  finalDate?: string | null;
+  issueDate?: string | null;
+};
+
+function permitMeetsOpenDuration(
+  permit: ListedPermit,
+  minimumOpenYears: number,
+  now: number
+) {
+  const age = permitAgeYears(permit.issueDate ?? null, now);
+  return !permit.finalDate && age !== null && age >= minimumOpenYears;
+}
+
 export function parcelsForPermitStatus<T extends { apn: string }>(
   roofAgeMatches: readonly T[],
-  permits: readonly { apn: string }[],
-  permitStatus: "open" | "all"
+  permits: readonly ListedPermit[],
+  permitStatus: "open" | "all",
+  radiusParcels: readonly T[] = roofAgeMatches,
+  minimumOpenYears: number | null = null,
+  now = Date.now()
 ) {
-  if (permitStatus === "all") return roofAgeMatches;
+  const pool = permitStatus === "open" ? radiusParcels : roofAgeMatches;
 
-  return roofAgeMatches.filter((parcel) =>
-    permits.some((permit) => permit.apn === parcel.apn)
+  return pool.filter((parcel) => {
+    const parcelPermits = permits.filter((permit) => permit.apn === parcel.apn);
+
+    if (permitStatus === "open" && parcelPermits.length === 0) return false;
+    if (minimumOpenYears === null) return true;
+
+    return parcelPermits.some((permit) =>
+      permitMeetsOpenDuration(permit, minimumOpenYears, now)
+    );
+  });
+}
+
+export function sortParcelsLongOpenFirst<T extends { apn: string }>(
+  parcels: readonly T[],
+  permits: readonly ListedPermit[],
+  now = Date.now()
+) {
+  const longOpenApns = new Set(
+    permits
+      .filter((permit) =>
+        isLongOpenPermit(
+          permit.finalDate ?? null,
+          permitAgeYears(permit.issueDate ?? null, now)
+        )
+      )
+      .map((permit) => permit.apn)
   );
+
+  return parcels
+    .map((parcel, index) => ({
+      parcel,
+      index,
+      rank: longOpenApns.has(parcel.apn) ? 0 : 1,
+    }))
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map((entry) => entry.parcel);
 }
 
 export const BBB_RATING_UNAVAILABLE = "BBB rating unavailable";

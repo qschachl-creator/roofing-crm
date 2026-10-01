@@ -31,6 +31,125 @@ export type AgentAnswer = {
 
 const BBB_NOTE = "BBB rating is unavailable in the current data.";
 
+export const SANTA_CLARA_CITY_CENTERS = [
+  { name: "San Jose", lat: 37.3382, lng: -121.8863 },
+  { name: "Santa Clara", lat: 37.3541, lng: -121.9552 },
+  { name: "Sunnyvale", lat: 37.3688, lng: -122.0363 },
+  { name: "Mountain View", lat: 37.3861, lng: -122.0839 },
+  { name: "Palo Alto", lat: 37.4419, lng: -122.143 },
+  { name: "Milpitas", lat: 37.4323, lng: -121.8996 },
+  { name: "Cupertino", lat: 37.323, lng: -122.0322 },
+  { name: "Campbell", lat: 37.2872, lng: -121.95 },
+  { name: "Los Gatos", lat: 37.2358, lng: -121.9624 },
+  { name: "Saratoga", lat: 37.2638, lng: -122.023 },
+  { name: "Morgan Hill", lat: 37.1305, lng: -121.6544 },
+  { name: "Gilroy", lat: 37.0058, lng: -121.5683 },
+] as const;
+
+const SEARCH_RADIUS_MILES = new Set([1, 3, 5, 10, 25]);
+
+const PLACE_STOP = new Set([
+  "a",
+  "an",
+  "the",
+  "this",
+  "that",
+  "these",
+  "those",
+  "my",
+  "our",
+  "your",
+  "me",
+  "open",
+  "roofing",
+  "roof",
+  "roofs",
+  "permit",
+  "permits",
+  "property",
+  "properties",
+  "parcel",
+  "parcels",
+  "year",
+  "years",
+  "mile",
+  "miles",
+  "search",
+  "radius",
+  "area",
+  "current",
+  "loaded",
+  "older",
+  "than",
+  "within",
+  "show",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "ten",
+  "fifteen",
+  "twenty",
+  "twenty-five",
+]);
+
+export type QuestionPlace =
+  | {
+      kind: "known";
+      name: string;
+      lat: number;
+      lng: number;
+      radiusMiles: number | null;
+    }
+  | { kind: "unknown"; name: string }
+  | { kind: "none" };
+
+export function questionSearchPlace(question: string): QuestionPlace {
+  const trimmed = question.trim();
+  const cities = [...SANTA_CLARA_CITY_CENTERS].sort(
+    (left, right) => right.name.length - left.name.length
+  );
+
+  for (const city of cities) {
+    const pattern = new RegExp(
+      `\\b${city.name.replace(/\s+/g, "\\s+")}\\b`,
+      "i"
+    );
+    if (!pattern.test(trimmed)) continue;
+
+    const askedMiles = askedRadiusMiles(trimmed);
+    return {
+      kind: "known",
+      name: city.name,
+      lat: city.lat,
+      lng: city.lng,
+      radiusMiles:
+        askedMiles !== null && SEARCH_RADIUS_MILES.has(askedMiles)
+          ? askedMiles
+          : null,
+    };
+  }
+
+  const unknown = unknownPlaceName(trimmed);
+  if (unknown) return { kind: "unknown", name: unknown };
+
+  return { kind: "none" };
+}
+
+function unknownPlaceName(question: string) {
+  const pattern =
+    /\b(?:of|near|around|in)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/gi;
+
+  for (const match of question.matchAll(pattern)) {
+    const name = match[1].trim();
+    if (PLACE_STOP.has(name.split(/\s+/)[0].toLowerCase())) continue;
+    return name;
+  }
+
+  return null;
+}
+
 const NUMBER_WORDS: Record<string, number> = {
   one: 1,
   two: 2,
@@ -42,6 +161,14 @@ const NUMBER_WORDS: Record<string, number> = {
   twenty: 20,
   "twenty-five": 25,
 };
+
+function askedRadiusMiles(question: string) {
+  const fromPhrase = firstQuantity(question, "miles");
+  if (fromPhrase !== null) return fromPhrase;
+
+  const singular = question.match(/\b(25|10|5|3|1)\s+mile\b/i);
+  return singular ? Number(singular[1]) : null;
+}
 
 function firstQuantity(question: string, unit: string) {
   const digits = question.match(new RegExp(`(\\d+)\\s*${unit}`, "i"));
@@ -85,6 +212,14 @@ export function answerRoofingQuestion(
   if (!trimmed) {
     return {
       answer: "Ask about roofs or open permits in the current search.",
+      matches: [],
+    };
+  }
+
+  const place = questionSearchPlace(trimmed);
+  if (place.kind === "unknown") {
+    return {
+      answer: `${place.name} is not in the Santa Clara County city list, so no search was run.`,
       matches: [],
     };
   }

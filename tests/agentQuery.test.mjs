@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { answerRoofingQuestion } from "../src/lib/agentQuery.ts";
+import {
+  SANTA_CLARA_CITY_CENTERS,
+  answerRoofingQuestion,
+  questionSearchPlace,
+} from "../src/lib/agentQuery.ts";
 import { installRoofAgeSnapshot } from "../src/lib/roofAgeProof.ts";
+
+const dashboardSource = readFileSync(
+  new URL("../src/components/CrmDashboard.tsx", import.meta.url),
+  "utf8"
+);
 
 installRoofAgeSnapshot({
   "67620085": {
@@ -105,4 +115,66 @@ test("agent lists roofs at least 15 years old and notes a larger asked radius", 
   );
   assert.match(answer.answer, /smaller than 10 miles/);
   assert.match(answer.matches[0].detail, /roof_age_years 16/);
+});
+
+test("a known city resolves to coordinates and an unknown city does not", () => {
+  const sanJose = SANTA_CLARA_CITY_CENTERS.find(
+    (city) => city.name === "San Jose"
+  );
+  assert.ok(sanJose);
+
+  const place = questionSearchPlace(
+    "Show open roofing permits older than five years within five miles of San Jose"
+  );
+  assert.equal(place.kind, "known");
+  if (place.kind !== "known") return;
+  assert.equal(place.name, "San Jose");
+  assert.equal(place.lat, sanJose.lat);
+  assert.equal(place.lng, sanJose.lng);
+  assert.equal(place.radiusMiles, 5);
+  assert.equal(Number.isFinite(place.lat), true);
+  assert.equal(Number.isFinite(place.lng), true);
+
+  for (const city of SANTA_CLARA_CITY_CENTERS) {
+    const resolved = questionSearchPlace(`roofs near ${city.name}`);
+    assert.equal(resolved.kind, "known");
+    if (resolved.kind !== "known") continue;
+    assert.equal(resolved.lat, city.lat);
+    assert.equal(resolved.lng, city.lng);
+  }
+
+  const unknown = questionSearchPlace(
+    "Show open roofing permits older than five years within five miles of Oakland"
+  );
+  assert.equal(unknown.kind, "unknown");
+  if (unknown.kind !== "unknown") return;
+  assert.equal(unknown.name, "Oakland");
+  assert.equal("lat" in unknown, false);
+  assert.equal("lng" in unknown, false);
+
+  const unnamed = questionSearchPlace(
+    "Show open roofing permits older than five years within five miles"
+  );
+  assert.equal(unnamed.kind, "none");
+
+  const refused = answerRoofingQuestion(
+    "Show open roofing permits older than five years within five miles of Oakland",
+    {
+      parcels,
+      permits,
+      radiusMiles: null,
+      hasSearched: false,
+      now: NOW,
+    }
+  );
+  assert.equal(refused.matches.length, 0);
+  assert.match(refused.answer, /Oakland is not in the Santa Clara County city list/);
+  assert.match(refused.answer, /no search was run/);
+  assert.equal(refused.answer.includes("Search a map radius first"), false);
+
+  assert.match(dashboardSource, /questionSearchPlace\(agentQuestion\)/);
+  assert.match(dashboardSource, /place\.kind === "known"/);
+  assert.match(dashboardSource, /lat: place\.lat/);
+  assert.match(dashboardSource, /lng: place\.lng/);
+  assert.match(dashboardSource, /searchProperties\(center, miles\)/);
 });
