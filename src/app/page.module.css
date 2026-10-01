@@ -634,4 +634,111 @@ input:disabled {
   box-shadow: inset 3px 0 0 #c4842a;
 }
 
+button.candidateCard {
+  display: block;
+  width: 100%;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button.candidateCard:focus-visible {
+  outline: 2px solid #17202a;
+  outline-offset: 2px;
+}
+
+.parcelDetail {
+  display: grid;
+  gap: 12px;
+}
+
+.parcelDetail .secondaryButton {
+  justify-self: start;
+}
+
+.detailContext,
+.detailValue {
+  margin: 0;
+  color: #53606e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.permitDetails {
+  display: grid;
+  gap: 10px;
+}
+
+.permitDetail {
+  padding: 10px 11px;
+  border: 1px solid #e1e5e9;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.permitDetail h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.permitDetail dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.permitDetail dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6c7785;
+}
+
+.permitDetail dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+
+.agentAnswer {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.agentAnswer p,
+.agentAnswer span {
+  margin: 0;
+  color: #53606e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.agentAnswer ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agentAnswer li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid #e1e5e9;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.agentAnswer strong {
+  font-size: 13px;
+}
+
 /* === CRM POLISH V1 END === */

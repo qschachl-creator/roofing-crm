@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  BBB_RATING_UNAVAILABLE,
+  NO_CONTRACTOR_RETURNED,
+  NO_PERMIT_RETURNED,
+  apnBatches,
   isLongOpenPermit,
   parcelsForPermitStatus,
   permitAgeYears,
+  selectedParcelPermitView,
 } from "../src/lib/candidateList.ts";
 import {
   installRoofAgeSnapshot,
@@ -134,10 +139,80 @@ test("long-open emphasis uses a final date and an issue age of at least five yea
   assert.match(dashboardSource, /styles\.candidateCardLongOpen/);
 });
 
+test("selected parcel view shows permit status, duration, contractor, and unavailable BBB", () => {
+  const openPermit = permitRow("67620085", "2018-06-01", null);
+  const openView = selectedParcelPermitView([openPermit], NOW);
+  const openAge = permitAgeYears(openPermit.issueDate, NOW);
+
+  assert.equal(openView.noPermitMessage, null);
+  assert.equal(openView.bbbRating, BBB_RATING_UNAVAILABLE);
+  assert.equal(openView.bbbRating, "BBB rating unavailable");
+  assert.equal(openView.permits.length, 1);
+  assert.equal(openView.permits[0].status, "ISSUED");
+  assert.equal(openView.permits[0].yearsSinceIssue, openAge);
+  assert.equal(openAge !== null && openAge >= 5, true);
+  assert.equal(
+    openView.permits[0].durationLabel,
+    `${openAge.toFixed(1)} years since issue`
+  );
+  assert.equal(openView.permits[0].longOpen, true);
+  assert.equal(openView.permits[0].contractorLabel, "SOURCE CONTRACTOR");
+
+  const missingContractor = {
+    ...permitRow("67620085", "2019-01-15", null),
+    status: null,
+    contractorName: "  ",
+  };
+  const missingView = selectedParcelPermitView([missingContractor], NOW);
+  assert.equal(missingView.permits[0].status, "Active Building Permit");
+  assert.equal(missingView.permits[0].contractorLabel, NO_CONTRACTOR_RETURNED);
+  assert.equal(missingView.permits[0].contractorLabel, "No contractor was returned");
+  assert.equal(missingView.bbbRating, "BBB rating unavailable");
+
+  const closed = permitRow("67620085", "2018-06-01", "2019-01-01");
+  const closedView = selectedParcelPermitView([closed], NOW);
+  assert.equal(closedView.permits[0].longOpen, false);
+  assert.equal(closedView.permits[0].status, "ISSUED");
+
+  const emptyView = selectedParcelPermitView([], NOW);
+  assert.deepEqual(emptyView.permits, []);
+  assert.equal(emptyView.noPermitMessage, NO_PERMIT_RETURNED);
+  assert.equal(
+    emptyView.noPermitMessage,
+    "No roofing permit was returned for this parcel."
+  );
+  assert.equal(emptyView.bbbRating, "BBB rating unavailable");
+
+  assert.match(dashboardSource, /selectedParcelPermitView\(permits\)/);
+  assert.match(dashboardSource, /\{detail\.status\}/);
+  assert.match(dashboardSource, /\{detail\.durationLabel\}/);
+  assert.match(dashboardSource, /\{detail\.contractorLabel\}/);
+  assert.match(dashboardSource, /detail\.longOpen/);
+  assert.match(dashboardSource, /\{permitView\.noPermitMessage\}/);
+  assert.match(dashboardSource, /\{permitView\.bbbRating\}/);
+  assert.match(dashboardSource, /setSelectedObjectId\(parcel\.objectId\)/);
+  assert.match(dashboardSource, /Back to radius list/);
+  assert.match(dashboardSource, /setSelectedObjectId\(null\)/);
+  assert.equal(dashboardSource.includes("bbb.org"), false);
+});
+
+test("permit requests are sent in batches of 100", () => {
+  const apns = Array.from({ length: 101 }, (_, index) =>
+    String(index).padStart(8, "0")
+  );
+  const batches = apnBatches(apns);
+
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].length, 100);
+  assert.equal(batches[1].length, 1);
+  assert.deepEqual(apnBatches([]), []);
+});
+
 test("permit search contract stays apns and open or all", () => {
+  assert.match(dashboardSource, /apnBatches\(apns\)/);
   assert.match(
     dashboardSource,
-    /JSON\.stringify\(\{\s*apns:\s*sanJoseApns,\s*permitStatus,\s*\}\)/
+    /JSON\.stringify\(\{\s*apns:\s*batch,\s*permitStatus:\s*status,\s*\}\)/
   );
 
   const select = dashboardSource.match(/Permit status[\s\S]*?<\/select>/);
@@ -157,6 +232,6 @@ test("permit search contract stays apns and open or all", () => {
   assert.deepEqual(parcelKeys, ["lat", "lng", "radiusMiles"]);
   assert.match(
     dashboardSource,
-    /The list was narrowed by the permit filter/
+    /Choose All roofing permits to see them/
   );
 });

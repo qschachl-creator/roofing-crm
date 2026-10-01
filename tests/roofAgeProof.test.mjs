@@ -237,7 +237,7 @@ test("qualifying parcel past the first within_circle page is merged", async () =
     const where = url.searchParams.get("$where") ?? "";
 
     if (where === circle) {
-      assert.equal(url.searchParams.get("$limit"), "100");
+      assert.equal(url.searchParams.get("$limit"), "101");
       return Response.json(firstPage);
     }
 
@@ -264,12 +264,13 @@ test("qualifying parcel past the first within_circle page is merged", async () =
   };
 
   try {
-    const parcels = await searchSantaClaraParcelsInRadius({
+    const { parcels, truncated } = await searchSantaClaraParcelsInRadius({
       latitude,
       longitude,
       radiusMeters,
       limit: 100,
     });
+    assert.equal(truncated, false);
     const listed = parcelsMeetingMinimumRoofAge(parcels, 15);
     const older = parcels.find((parcel) => undashedApn(parcel.apn) === "67620085");
     const point = representativePoint(recordedGeom67620085.coordinates);
@@ -304,4 +305,61 @@ test("qualifying parcel past the first within_circle page is merged", async () =
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("a full county page reports that more parcels exist", async () => {
+  const latitude = 37.33;
+  const longitude = -121.88;
+  const radiusMeters = 100;
+  const circle = `within_circle(the_geom,${latitude},${longitude},${radiusMeters})`;
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const where = url.searchParams.get("$where") ?? "";
+
+    if (where === circle) {
+      assert.equal(url.searchParams.get("$limit"), "3");
+      return Response.json([
+        { objectid: "1", apn: "111" },
+        { objectid: "2", apn: "222" },
+        { objectid: "3", apn: "333" },
+      ]);
+    }
+
+    return Response.json([]);
+  };
+
+  try {
+    const result = await searchSantaClaraParcelsInRadius({
+      latitude,
+      longitude,
+      radiusMeters,
+      limit: 2,
+    });
+
+    assert.equal(result.truncated, true);
+    assert.deepEqual(
+      result.parcels.map((parcel) => parcel.apn),
+      ["111", "222"]
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("the map page stops at 500 and the open-permit empty state names All", () => {
+  const routeSource = readFileSync(
+    new URL("../src/app/api/parcels/search/route.ts", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(routeSource, /const PARCEL_PAGE_LIMIT = 500/);
+  assert.match(
+    dashboardSource,
+    /Map shows the first \{mapPageLimit\} parcels in this circle/
+  );
+  assert.match(dashboardSource, /The county returned more/);
+  assert.match(dashboardSource, /Choose All roofing permits to see them/);
+  assert.match(dashboardSource, /writeSavedLeads/);
 });

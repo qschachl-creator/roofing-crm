@@ -271,18 +271,23 @@ export async function searchSantaClaraParcelsInRadius({
   longitude: number;
   radiusMeters: number;
   limit: number;
-}) {
+}): Promise<{ parcels: ParcelSearchResult[]; truncated: boolean }> {
   const page = await searchSantaClaraParcels({
     latitude,
     longitude,
     radiusMeters,
-    limit,
+    limit: limit + 1,
   });
+  const truncated = page.length > limit;
+  const visiblePage = truncated ? page.slice(0, limit) : page;
   const qualifying = await searchQualifyingRoofAgeParcelsInCircle({
     latitude,
     longitude,
     radiusMeters,
   });
 
-  return mergeParcelsByUndashedApn(page, qualifying);
+  return {
+    parcels: mergeParcelsByUndashedApn(visiblePage, qualifying),
+    truncated,
+  };
 }
