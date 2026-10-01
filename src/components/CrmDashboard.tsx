@@ -3,6 +3,12 @@
 import { useState } from "react";
 import MapClient from "./MapClient";
 import styles from "@/app/page.module.css";
+import {
+  installRoofAgeSnapshot,
+  parcelsMeetingMinimumRoofAge,
+  roofAgeCardLabel,
+  type RoofAgeSnapshotRow,
+} from "@/lib/roofAgeProof";
 
 type SearchCenter = {
   lat: number;
@@ -76,7 +82,11 @@ function permitAgeYears(issueDate: string | null) {
   );
 }
 
-export default function CrmDashboard() {
+export default function CrmDashboard({
+  roofAgeByApn,
+}: {
+  roofAgeByApn: Record<string, RoofAgeSnapshotRow>;
+}) {
   const [activeSection, setActiveSection] = useState<
     "explore" | "leads" | "agent"
   >("explore");
@@ -93,6 +103,8 @@ export default function CrmDashboard() {
   const [locationMessage, setLocationMessage] = useState(
     "Click the map or use your current location."
   );
+  installRoofAgeSnapshot(roofAgeByApn);
+  const listedParcels = parcelsMeetingMinimumRoofAge(parcels, roofAge);
 
   function navigateToSection(section: "explore" | "leads" | "agent") {
     setActiveSection(section);
@@ -369,13 +381,14 @@ export default function CrmDashboard() {
                 <p className={styles.eyebrow}>Geographic matches</p>
                 <h3>Parcels in radius</h3>
               </div>
-              <span className={styles.count}>{parcels.length}</span>
+              <span className={styles.count}>{listedParcels.length}</span>
             </div>
 
             <p className={styles.candidateNotice}>
               County GIS determines geographic matches. San Jose roofing
               permits are enriched from the city&apos;s ArcGIS source using APN.
-              Roof-age filtering remains pending source-backed enrichment.
+              This list keeps parcels whose Oracle roof-age snapshot meets the
+              selected minimum. Parcels without a roof age are omitted.
             </p>
 
             {permitError ? (
@@ -390,9 +403,9 @@ export default function CrmDashboard() {
                 <strong>Search unavailable</strong>
                 <p>{searchError}</p>
               </div>
-            ) : parcels.length > 0 ? (
+            ) : listedParcels.length > 0 ? (
               <div className={styles.candidateList}>
-                {parcels.map((parcel) => {
+                {listedParcels.map((parcel) => {
                   const permits = roofingPermits.filter(
                     (permit) => permit.apn === parcel.apn
                   );
@@ -415,7 +428,7 @@ export default function CrmDashboard() {
                       </p>
 
                       <div className={styles.candidateMeta}>
-                        <span>Roof age: pending source enrichment</span>
+                        <span>{roofAgeCardLabel(parcel.apn)}</span>
 
                         {permits.length === 0 ? (
                           <span>
@@ -454,11 +467,17 @@ export default function CrmDashboard() {
             ) : (
               <div className={styles.emptyState}>
                 <strong>
-                  {hasSearched ? "No parcels returned" : "No search results yet"}
+                  {hasSearched
+                    ? parcels.length > 0
+                      ? "No parcels meet the minimum roof age"
+                      : "No parcels returned"
+                    : "No search results yet"}
                 </strong>
                 <p>
                   {hasSearched
-                    ? "Try another search center or radius."
+                    ? parcels.length > 0
+                      ? "None of the parcels in this radius have a snapshot roof age at least as old as the selected minimum."
+                      : "Try another search center or radius."
                     : "Choose a map location or use GPS, then search the county parcel dataset."}
                 </p>
               </div>

@@ -1,5 +1,14 @@
+import { readFileSync } from "node:fs";
 import CrmDashboard from "@/components/CrmDashboard";
+import {
+  ROOF_AGE_SNAPSHOT_PATH,
+  type RoofAgeSnapshotFile,
+} from "@/lib/roofAgeProof";
 
 export default function Home() {
-  return <CrmDashboard />;
+  const snapshot = JSON.parse(
+    readFileSync(ROOF_AGE_SNAPSHOT_PATH, "utf8")
+  ) as RoofAgeSnapshotFile;
+
+  return <CrmDashboard roofAgeByApn={snapshot.parcels} />;
 }
