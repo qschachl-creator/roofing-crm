@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchSantaClaraParcels } from "@/lib/santaClaraParcels";
+import { searchSantaClaraParcelsInRadius } from "@/lib/santaClaraParcels";
 
 const ALLOWED_RADII = new Set([1, 3, 5, 10, 25]);
 
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const parcels = await searchSantaClaraParcels({
+    const parcels = await searchSantaClaraParcelsInRadius({
       latitude,
       longitude,
       radiusMeters: radiusMiles * 1609.344,

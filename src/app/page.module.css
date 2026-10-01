@@ -612,4 +612,26 @@ input:disabled {
   }
 }
 
+.permitLine {
+  display: grid;
+  gap: 6px;
+}
+
+.longOpen {
+  justify-self: start;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f4e4c8;
+  color: #7a4e08;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.candidateCard.candidateCardLongOpen {
+  border-color: #e0c48a;
+  box-shadow: inset 3px 0 0 #c4842a;
+}
+
 /* === CRM POLISH V1 END === */

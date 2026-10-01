@@ -1,5 +1,29 @@
+import { readFileSync } from "node:fs";
+import {
+  installRoofAgeSnapshot,
+  meetsMinimumRoofAge,
+  undashedApn,
+  type RoofAgeSnapshotFile,
+} from "./roofAgeProof.ts";
+import { ROOF_AGE_SNAPSHOT_PATH } from "./roofAgeSnapshotPath.ts";
+
 const DATASET_URL = "https://data.sccgov.org/resource/ubcd-cewv.json";
 const DATASET_ID = "ubcd-cewv";
+const MINIMUM_ROOF_AGE_YEARS = 15;
+const PARCEL_SELECT = [
+  "objectid",
+  "apn",
+  "jurisdiction",
+  "situs_house_number",
+  "situs_street_direction",
+  "situs_street_name",
+  "situs_street_type",
+  "situs_unit_number",
+  "situs_city_name",
+  "situs_state_code",
+  "situs_zip_code",
+  "the_geom",
+].join(",");
 
 type Coordinate = unknown;
 
@@ -103,41 +127,68 @@ function formatAddress(parcel: SocrataParcel) {
   return [street, locality].filter(Boolean).join(", ");
 }
 
-export async function searchSantaClaraParcels({
-  latitude,
-  longitude,
-  radiusMeters,
-  limit,
-}: {
-  latitude: number;
-  longitude: number;
-  radiusMeters: number;
-  limit: number;
-}): Promise<ParcelSearchResult[]> {
+function withinCircleWhere(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number
+) {
+  return `within_circle(the_geom,${latitude},${longitude},${radiusMeters})`;
+}
+
+let snapshotApnsMeetingMinimumRoofAge: readonly string[] | null = null;
+
+function qualifyingSnapshotApns() {
+  if (snapshotApnsMeetingMinimumRoofAge) {
+    return snapshotApnsMeetingMinimumRoofAge;
+  }
+
+  const snapshot = JSON.parse(
+    readFileSync(ROOF_AGE_SNAPSHOT_PATH, "utf8")
+  ) as RoofAgeSnapshotFile;
+
+  installRoofAgeSnapshot(snapshot.parcels);
+  snapshotApnsMeetingMinimumRoofAge = Object.keys(snapshot.parcels).filter(
+    (apn) => meetsMinimumRoofAge(apn, MINIMUM_ROOF_AGE_YEARS)
+  );
+
+  return snapshotApnsMeetingMinimumRoofAge;
+}
+
+function quotedDatasetApn(apn: string) {
+  const spelled = undashedApn(apn);
+
+  if (!/^\d+$/.test(spelled)) {
+    throw new Error(`Santa Clara APN is not stored as undashed digits: ${apn}`);
+  }
+
+  return `'${spelled}'`;
+}
+
+function mergeParcelsByUndashedApn(
+  parcels: readonly ParcelSearchResult[],
+  extra: readonly ParcelSearchResult[]
+) {
+  const seen = new Set(parcels.map((parcel) => undashedApn(parcel.apn)));
+  const merged = [...parcels];
+
+  for (const parcel of extra) {
+    const key = undashedApn(parcel.apn);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(parcel);
+  }
+
+  return merged;
+}
+
+async function querySantaClaraParcels(
+  where: string,
+  limit: number
+): Promise<ParcelSearchResult[]> {
   const url = new URL(DATASET_URL);
 
-  url.searchParams.set(
-    "$select",
-    [
-      "objectid",
-      "apn",
-      "jurisdiction",
-      "situs_house_number",
-      "situs_street_direction",
-      "situs_street_name",
-      "situs_street_type",
-      "situs_unit_number",
-      "situs_city_name",
-      "situs_state_code",
-      "situs_zip_code",
-      "the_geom",
-    ].join(",")
-  );
-
-  url.searchParams.set(
-    "$where",
-    `within_circle(the_geom,${latitude},${longitude},${radiusMeters})`
-  );
+  url.searchParams.set("$select", PARCEL_SELECT);
+  url.searchParams.set("$where", where);
   url.searchParams.set("$limit", String(limit));
 
   const response = await fetch(url, {
@@ -173,4 +224,65 @@ export async function searchSantaClaraParcels({
         },
       };
     });
+}
+
+export async function searchSantaClaraParcels({
+  latitude,
+  longitude,
+  radiusMeters,
+  limit,
+}: {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  limit: number;
+}): Promise<ParcelSearchResult[]> {
+  return querySantaClaraParcels(
+    withinCircleWhere(latitude, longitude, radiusMeters),
+    limit
+  );
+}
+
+async function searchQualifyingRoofAgeParcelsInCircle({
+  latitude,
+  longitude,
+  radiusMeters,
+}: {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+}) {
+  const apns = qualifyingSnapshotApns().map(quotedDatasetApn);
+  if (apns.length === 0) return [];
+
+  return querySantaClaraParcels(
+    `${withinCircleWhere(latitude, longitude, radiusMeters)} AND apn in(${apns.join(",")})`,
+    apns.length
+  );
+}
+
+export async function searchSantaClaraParcelsInRadius({
+  latitude,
+  longitude,
+  radiusMeters,
+  limit,
+}: {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  limit: number;
+}) {
+  const page = await searchSantaClaraParcels({
+    latitude,
+    longitude,
+    radiusMeters,
+    limit,
+  });
+  const qualifying = await searchQualifyingRoofAgeParcelsInCircle({
+    latitude,
+    longitude,
+    radiusMeters,
+  });
+
+  return mergeParcelsByUndashedApn(page, qualifying);
 }

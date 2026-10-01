@@ -1,12 +1,4 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 export const PENDING_ROOF_AGE_LABEL = "Roof age: pending source enrichment";
-
-export const ROOF_AGE_SNAPSHOT_PATH = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../fixtures/san-jose-reroof-roof-age.json"
-);
 
 export type RoofAgeSnapshotRow = {
   parcel_identifier: string;

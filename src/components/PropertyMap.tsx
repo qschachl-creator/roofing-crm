@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
   Circle,
   CircleMarker,
@@ -11,11 +11,25 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
-import type { LatLngExpression, LeafletMouseEvent } from "leaflet";
+import type { LatLngExpression, LeafletMouseEvent, PathOptions } from "leaflet";
 import L from "leaflet";
-import type { MapClientProps, SearchCenter } from "./MapClient";
+import type { MapClientProps, ParcelMapPoint, SearchCenter } from "./MapClient";
 
 const SANTA_CLARA_CENTER: LatLngExpression = [37.35, -121.95];
+
+const PARCEL_DOT_STYLE: PathOptions = {
+  color: "#334155",
+  fillColor: "#ffffff",
+  fillOpacity: 0.9,
+  weight: 2,
+};
+
+const RADIUS_STYLE: PathOptions = {
+  color: "#111820",
+  fillColor: "#111820",
+  fillOpacity: 0.08,
+  weight: 2,
+};
 
 const pinIcon = L.divIcon({
   className: "",
@@ -57,14 +71,72 @@ function RecenterMap({
   searchCenter: SearchCenter | null;
 }) {
   const map = useMap();
+  const latitude = searchCenter?.lat;
+  const longitude = searchCenter?.lng;
 
   useEffect(() => {
-    if (searchCenter) {
-      map.flyTo([searchCenter.lat, searchCenter.lng], 13);
+    if (latitude === undefined || longitude === undefined) {
+      return;
     }
-  }, [map, searchCenter]);
+
+    map.flyTo([latitude, longitude], 13);
+  }, [map, latitude, longitude]);
 
   return null;
+}
+
+function SearchOverlay({
+  searchCenter,
+  radiusMeters,
+}: {
+  searchCenter: SearchCenter;
+  radiusMeters: number;
+}) {
+  const position = useMemo<LatLngExpression>(
+    () => [searchCenter.lat, searchCenter.lng],
+    [searchCenter.lat, searchCenter.lng]
+  );
+
+  return (
+    <>
+      <Marker position={position} icon={pinIcon} />
+      <Circle
+        center={position}
+        radius={radiusMeters}
+        pathOptions={RADIUS_STYLE}
+      />
+    </>
+  );
+}
+
+function ParcelDot({ parcel }: { parcel: ParcelMapPoint }) {
+  const latitude = parcel.latitude;
+  const longitude = parcel.longitude;
+  const position = useMemo<LatLngExpression | null>(() => {
+    if (latitude === null || longitude === null) {
+      return null;
+    }
+
+    return [latitude, longitude];
+  }, [latitude, longitude]);
+
+  if (!position) {
+    return null;
+  }
+
+  return (
+    <CircleMarker
+      center={position}
+      radius={5}
+      pathOptions={PARCEL_DOT_STYLE}
+    >
+      <Tooltip>
+        <strong>APN {parcel.apn}</strong>
+        <br />
+        {parcel.address || "Address unavailable"}
+      </Tooltip>
+    </CircleMarker>
+  );
 }
 
 export default function PropertyMap({
@@ -98,49 +170,15 @@ export default function PropertyMap({
         <RecenterMap searchCenter={searchCenter} />
 
         {searchCenter ? (
-          <>
-            <Marker
-              position={[searchCenter.lat, searchCenter.lng]}
-              icon={pinIcon}
-            />
-            <Circle
-              center={[searchCenter.lat, searchCenter.lng]}
-              radius={radiusMeters}
-              pathOptions={{
-                color: "#111820",
-                fillColor: "#111820",
-                fillOpacity: 0.08,
-                weight: 2,
-              }}
-            />
-          </>
+          <SearchOverlay
+            searchCenter={searchCenter}
+            radiusMeters={radiusMeters}
+          />
         ) : null}
 
-        {parcels.map((parcel) => {
-          if (parcel.latitude === null || parcel.longitude === null) {
-            return null;
-          }
-
-          return (
-            <CircleMarker
-              key={parcel.objectId}
-              center={[parcel.latitude, parcel.longitude]}
-              radius={5}
-              pathOptions={{
-                color: "#334155",
-                fillColor: "#ffffff",
-                fillOpacity: 0.9,
-                weight: 2,
-              }}
-            >
-              <Tooltip>
-                <strong>APN {parcel.apn}</strong>
-                <br />
-                {parcel.address || "Address unavailable"}
-              </Tooltip>
-            </CircleMarker>
-          );
-        })}
+        {parcels.map((parcel) => (
+          <ParcelDot key={parcel.objectId} parcel={parcel} />
+        ))}
       </MapContainer>
     </div>
   );

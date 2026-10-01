@@ -4,6 +4,11 @@ import { useState } from "react";
 import MapClient from "./MapClient";
 import styles from "@/app/page.module.css";
 import {
+  isLongOpenPermit,
+  parcelsForPermitStatus,
+  permitAgeYears,
+} from "@/lib/candidateList";
+import {
   installRoofAgeSnapshot,
   parcelsMeetingMinimumRoofAge,
   roofAgeCardLabel,
@@ -70,18 +75,6 @@ type ErrorResponse = {
   error?: string;
 };
 
-function permitAgeYears(issueDate: string | null) {
-  if (!issueDate) return null;
-
-  const issued = new Date(`${issueDate}T00:00:00Z`);
-  if (Number.isNaN(issued.valueOf())) return null;
-
-  return Math.max(
-    0,
-    (Date.now() - issued.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
-  );
-}
-
 export default function CrmDashboard({
   roofAgeByApn,
 }: {
@@ -104,7 +97,17 @@ export default function CrmDashboard({
     "Click the map or use your current location."
   );
   installRoofAgeSnapshot(roofAgeByApn);
-  const listedParcels = parcelsMeetingMinimumRoofAge(parcels, roofAge);
+  const roofAgeMatches = parcelsMeetingMinimumRoofAge(parcels, roofAge);
+  const listedParcels = parcelsForPermitStatus(
+    roofAgeMatches,
+    roofingPermits,
+    permitStatus
+  );
+  const narrowedByOpenPermits =
+    hasSearched &&
+    permitStatus === "open" &&
+    roofAgeMatches.length > 0 &&
+    listedParcels.length === 0;
 
   function navigateToSection(section: "explore" | "leads" | "agent") {
     setActiveSection(section);
@@ -406,14 +409,22 @@ export default function CrmDashboard({
             ) : listedParcels.length > 0 ? (
               <div className={styles.candidateList}>
                 {listedParcels.map((parcel) => {
-                  const permits = roofingPermits.filter(
-                    (permit) => permit.apn === parcel.apn
-                  );
+                  const permitLines = roofingPermits
+                    .filter((permit) => permit.apn === parcel.apn)
+                    .map((permit) => {
+                      const age = permitAgeYears(permit.issueDate);
+                      const longOpen = isLongOpenPermit(permit.finalDate, age);
+                      return { permit, age, longOpen };
+                    });
 
                   return (
                     <article
-                      className={styles.candidateCard}
-                     key={parcel.objectId}
+                      className={
+                        permitLines.some((line) => line.longOpen)
+                          ? `${styles.candidateCard} ${styles.candidateCardLongOpen}`
+                          : styles.candidateCard
+                      }
+                      key={parcel.objectId}
                     >
                       <div className={styles.candidateCardHeader}>
                         <strong>
@@ -430,18 +441,17 @@ export default function CrmDashboard({
                       <div className={styles.candidateMeta}>
                         <span>{roofAgeCardLabel(parcel.apn)}</span>
 
-                        {permits.length === 0 ? (
+                        {permitLines.length === 0 ? (
                           <span>
                             Roofing permit: none returned for selected filter
                           </span>
                         ) : (
-                          permits.map((permit) => {
-                            const age = permitAgeYears(permit.issueDate);
-                            const longOpen =
-                              !permit.finalDate && age !== null && age >= 5;
-
-                            return (
-                              <span key={permit.permitNumber}>
+                          permitLines.map(({ permit, age, longOpen }) => (
+                            <div
+                              key={permit.permitNumber}
+                              className={styles.permitLine}
+                            >
+                              <span>
                                 <strong>{permit.permitNumber}</strong>
                                 {" · "}
                                 {permit.status || permit.layerName}
@@ -451,13 +461,17 @@ export default function CrmDashboard({
                                 {age !== null
                                   ? ` · ${age.toFixed(1)} years since issue`
                                   : ""}
-                                {longOpen ? " · long-open" : ""}
                                 {permit.contractorName
                                   ? ` · contractor source: ${permit.contractorName}`
                                   : ""}
                               </span>
-                            );
-                          })
+                              {longOpen ? (
+                                <span className={styles.longOpen}>
+                                  Long-open
+                                </span>
+                              ) : null}
+                            </div>
+                          ))
                         )}
                       </div>
                     </article>
@@ -468,16 +482,20 @@ export default function CrmDashboard({
               <div className={styles.emptyState}>
                 <strong>
                   {hasSearched
-                    ? parcels.length > 0
-                      ? "No parcels meet the minimum roof age"
-                      : "No parcels returned"
+                    ? narrowedByOpenPermits
+                      ? "Permit filter narrowed this list"
+                      : parcels.length > 0
+                        ? "No parcels meet the minimum roof age"
+                        : "No parcels returned"
                     : "No search results yet"}
                 </strong>
                 <p>
                   {hasSearched
-                    ? parcels.length > 0
-                      ? "None of the parcels in this radius have a snapshot roof age at least as old as the selected minimum."
-                      : "Try another search center or radius."
+                    ? narrowedByOpenPermits
+                      ? "The radius still has parcels that meet the roof-age minimum. The list was narrowed by the permit filter."
+                      : parcels.length > 0
+                        ? "None of the parcels in this radius have a snapshot roof age at least as old as the selected minimum."
+                        : "Try another search center or radius."
                     : "Choose a map location or use GPS, then search the county parcel dataset."}
                 </p>
               </div>

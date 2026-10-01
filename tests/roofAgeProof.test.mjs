@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { searchSantaClaraParcelsInRadius } from "../src/lib/santaClaraParcels.ts";
 import {
-  ROOF_AGE_SNAPSHOT_PATH,
   installRoofAgeSnapshot,
   meetsMinimumRoofAge,
   parcelsMeetingMinimumRoofAge,
   roofAgeCardLabel,
+  undashedApn,
 } from "../src/lib/roofAgeProof.ts";
+import { ROOF_AGE_SNAPSHOT_PATH } from "../src/lib/roofAgeSnapshotPath.ts";
 
 const PENDING = "Roof age: pending source enrichment";
 const dashboardSource = readFileSync(
@@ -132,4 +134,174 @@ test("minimum roof age 15 lists only snapshot ages of at least 15", () => {
     dashboardSource,
     /parcelsMeetingMinimumRoofAge\(parcels, roofAge\)/
   );
+});
+
+const recordedGeom67620085 = {
+  type: "MultiPolygon",
+  coordinates: [
+    [
+      [
+        [-121.795368228717, 37.312160271065],
+        [-121.795412283072, 37.312155738526],
+        [-121.795456562659, 37.312154933315],
+        [-121.795500752679, 37.312157861156],
+        [-121.79560488898, 37.312173753835],
+        [-121.795666343627, 37.312177977784],
+        [-121.795728016564, 37.312177114703],
+        [-121.795741742671, 37.312176667009],
+        [-121.795755349597, 37.312178526584],
+        [-121.795768452256, 37.312182640801],
+        [-121.795780679833, 37.312188893224],
+        [-121.79579168628, 37.312197106906],
+        [-121.795801160106, 37.312207049394],
+        [-121.795808833195, 37.312218439308],
+        [-121.795814488394, 37.312230954306],
+        [-121.795846733421, 37.312369143348],
+        [-121.79543101826, 37.312430243951],
+        [-121.795368228717, 37.312160271065],
+      ],
+    ],
+  ],
+};
+
+function representativePoint(coordinates) {
+  const points = [];
+
+  function collect(value) {
+    if (!Array.isArray(value)) return;
+
+    if (
+      value.length >= 2 &&
+      typeof value[0] === "number" &&
+      typeof value[1] === "number"
+    ) {
+      points.push(value);
+      return;
+    }
+
+    for (const child of value) collect(child);
+  }
+
+  collect(coordinates);
+
+  let minLongitude = Infinity;
+  let maxLongitude = -Infinity;
+  let minLatitude = Infinity;
+  let maxLatitude = -Infinity;
+
+  for (const [longitude, latitude] of points) {
+    minLongitude = Math.min(minLongitude, longitude);
+    maxLongitude = Math.max(maxLongitude, longitude);
+    minLatitude = Math.min(minLatitude, latitude);
+    maxLatitude = Math.max(maxLatitude, latitude);
+  }
+
+  return {
+    latitude: (minLatitude + maxLatitude) / 2,
+    longitude: (minLongitude + maxLongitude) / 2,
+  };
+}
+
+test("qualifying parcel past the first within_circle page is merged", async () => {
+  const latitude = 37.33;
+  const longitude = -121.88;
+  const radiusMeters = 1609.344;
+  const circle = `within_circle(the_geom,${latitude},${longitude},${radiusMeters})`;
+  const qualifyingApns = Object.keys(snapshot.parcels).filter((apn) =>
+    meetsMinimumRoofAge(apn, 15)
+  );
+  const firstPage = [
+    { objectid: "1", apn: "09241022" },
+    { objectid: "2", apn: "68958007" },
+  ];
+
+  for (let index = 0; index < 98; index += 1) {
+    firstPage.push({
+      objectid: String(1000 + index),
+      apn: String(80000000 + index),
+    });
+  }
+
+  assert.equal(firstPage.length, 100);
+  assert.equal(
+    firstPage.some((row) => row.apn === "67620085"),
+    false
+  );
+
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+
+  globalThis.fetch = async (input) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    calls.push(url);
+    const where = url.searchParams.get("$where") ?? "";
+
+    if (where === circle) {
+      assert.equal(url.searchParams.get("$limit"), "100");
+      return Response.json(firstPage);
+    }
+
+    const apnClause = where.slice(where.indexOf("apn in("));
+    assert.equal(where.startsWith(`${circle} AND apn in(`), true);
+    assert.equal(apnClause.includes("-"), false);
+    for (const apn of qualifyingApns) {
+      assert.equal(apnClause.includes(`'${undashedApn(apn)}'`), true);
+    }
+    assert.equal(url.searchParams.get("$limit"), String(qualifyingApns.length));
+
+    return Response.json([
+      {
+        objectid: "366283",
+        apn: "67620085",
+        jurisdiction: "SAN JOSE",
+        situs_house_number: "3350",
+        situs_street_name: "KETTMANN",
+        situs_street_type: "RD",
+        situs_city_name: "SAN JOSE",
+        the_geom: recordedGeom67620085,
+      },
+    ]);
+  };
+
+  try {
+    const parcels = await searchSantaClaraParcelsInRadius({
+      latitude,
+      longitude,
+      radiusMeters,
+      limit: 100,
+    });
+    const listed = parcelsMeetingMinimumRoofAge(parcels, 15);
+    const older = parcels.find((parcel) => undashedApn(parcel.apn) === "67620085");
+    const point = representativePoint(recordedGeom67620085.coordinates);
+
+    assert.equal(calls.length, 2);
+    assert.ok(older);
+    assert.equal(older.latitude, point.latitude);
+    assert.equal(older.longitude, point.longitude);
+    assert.deepEqual(
+      listed.map((parcel) => undashedApn(parcel.apn)),
+      ["67620085"]
+    );
+    assert.equal(
+      parcels.some((parcel) => undashedApn(parcel.apn) === "09241022"),
+      true
+    );
+    assert.equal(meetsMinimumRoofAge("09241022", 15), false);
+    assert.equal(
+      listed.some((parcel) => undashedApn(parcel.apn) === "09241022"),
+      false
+    );
+    assert.equal(
+      parcels.some((parcel) => undashedApn(parcel.apn) === "68958007"),
+      true
+    );
+    assert.equal(meetsMinimumRoofAge("68958007", 15), false);
+    assert.equal(
+      snapshot.parcels["68958007"].roof_age_eligibility_reason,
+      "no_valid_anchor"
+    );
+    assert.match(roofAgeCardLabel("68958007"), /no_valid_anchor/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
