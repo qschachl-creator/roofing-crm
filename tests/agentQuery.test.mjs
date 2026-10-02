@@ -114,7 +114,7 @@ test("agent lists roofs at least 15 years old and notes a larger asked radius", 
     answer.matches.map((match) => match.apn),
     ["67620085"]
   );
-  assert.match(answer.answer, /smaller than 10 miles/);
+  assert.match(answer.answer, /smaller than the 10 miles asked/);
   assert.match(answer.matches[0].detail, /16 years old, replaced 2010-06-01/);
   assert.match(answer.answer, /published snapshot/);
 });
@@ -179,6 +179,99 @@ test("a known city resolves to coordinates and an unknown city does not", () => 
   assert.match(dashboardSource, /lat: place\.lat/);
   assert.match(dashboardSource, /lng: place\.lng/);
   assert.match(dashboardSource, /searchProperties\(center, miles\)/);
+});
+
+test("agent keeps the asked city, radius, and permit age accurate", () => {
+  const demo = questionSearchPlace(
+    "Which properties in Santa Clara County within five miles of San Jose have roofs older than 15 years?"
+  );
+  assert.equal(demo.kind, "known");
+  if (demo.kind !== "known") return;
+  assert.equal(demo.name, "San Jose");
+  assert.equal(demo.radiusMiles, 5);
+
+  const countyOnly = questionSearchPlace(
+    "Which properties in Santa Clara County have roofs older than 15 years?"
+  );
+  assert.equal(countyOnly.kind, "none");
+
+  const hyphen = questionSearchPlace(
+    "Show open permits within a 5-mile radius of Milpitas"
+  );
+  assert.equal(hyphen.kind, "known");
+  if (hyphen.kind !== "known") return;
+  assert.equal(hyphen.name, "Milpitas");
+  assert.equal(hyphen.radiusMiles, 5);
+
+  const young = {
+    apn: "09241022",
+    permitNumber: "2026-000003-RS",
+    issueDate: "2026-06-01",
+    finalDate: null,
+    contractorName: "NEW ROOFING",
+  };
+  const duplicate = { ...permits[0] };
+  const withYoung = [...permits, young, duplicate];
+
+  const everyOpen = answerRoofingQuestion("Show open roofing permits", {
+    parcels,
+    permits: withYoung,
+    radiusMiles: 5,
+    hasSearched: true,
+    permitStatus: "open",
+    now: NOW,
+  });
+  assert.deepEqual(
+    everyOpen.matches.map((match) => match.detail.split(":")[0]).sort(),
+    ["1997-000001-RS", "2026-000003-RS"]
+  );
+  assert.match(everyOpen.answer, /active permit layer/);
+  assert.equal(everyOpen.answer.includes("CLOSED ROOFING"), false);
+
+  const olderThanFive = answerRoofingQuestion(
+    "Show open roofing permits older than five years",
+    {
+      parcels,
+      permits: withYoung,
+      radiusMiles: 5,
+      hasSearched: true,
+      now: NOW,
+    }
+  );
+  assert.deepEqual(
+    olderThanFive.matches.map((match) => match.apn),
+    ["67620085"]
+  );
+
+  const tenYearRoofs = answerRoofingQuestion(
+    "Which properties have roofs older than 10 years?",
+    {
+      parcels,
+      permits,
+      radiusMiles: 5,
+      hasSearched: true,
+      now: NOW,
+    }
+  );
+  assert.match(tenYearRoofs.answer, /at least 10 years/);
+  assert.equal(tenYearRoofs.answer.includes("at least 15"), false);
+
+  const smallerRadius = answerRoofingQuestion(
+    "Show roofs older than 15 years within 1 mile",
+    {
+      parcels,
+      permits,
+      radiusMiles: 5,
+      hasSearched: true,
+      truncated: true,
+      now: NOW,
+    }
+  );
+  assert.match(smallerRadius.answer, /larger than the 1 mile asked/);
+  assert.match(smallerRadius.answer, /only the parcels that were loaded/);
+
+  assert.match(dashboardSource, /truncated: loaded\.truncated/);
+  assert.match(dashboardSource, /truncated: mapTruncated/);
 });
 
 test("agent match clicks select the loaded parcel and copy is present tense", () => {

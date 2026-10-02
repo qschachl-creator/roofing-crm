@@ -378,6 +378,8 @@ export default function CrmDashboard({
           radiusMiles: miles,
           hasSearched: true,
           permitError: loaded.permitError,
+          permitStatus,
+          truncated: loaded.truncated,
         })
       );
       return;
@@ -390,6 +392,8 @@ export default function CrmDashboard({
         radiusMiles: hasSearched ? radiusMiles : null,
         hasSearched,
         permitError,
+        permitStatus,
+        truncated: mapTruncated,
       })
     );
   }
@@ -406,6 +410,7 @@ export default function CrmDashboard({
         parcels: [] as ParcelResult[],
         permits: [] as RoofingPermit[],
         permitError: null as string | null,
+        truncated: false,
       };
     }
 
@@ -449,6 +454,7 @@ export default function CrmDashboard({
         parcels: payload.parcels,
         permits: loadedPermits.permits,
         permitError: loadedPermits.error,
+        truncated: payload.truncated,
       };
     } catch (error) {
       const message =
@@ -462,6 +468,7 @@ export default function CrmDashboard({
         parcels: [] as ParcelResult[],
         permits: [] as RoofingPermit[],
         permitError: null as string | null,
+        truncated: false,
       };
     } finally {
       setIsSearching(false);

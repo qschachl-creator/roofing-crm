@@ -109,25 +109,54 @@ export type QuestionPlace =
   | { kind: "unknown"; name: string }
   | { kind: "none" };
 
+function cityPattern(name: string) {
+  return new RegExp(`\\b${name.replace(/\s+/g, "\\s+")}\\b`, "gi");
+}
+
+function cityHits(question: string) {
+  const hits: {
+    name: string;
+    lat: number;
+    lng: number;
+    index: number;
+  }[] = [];
+
+  for (const city of SANTA_CLARA_CITY_CENTERS) {
+    for (const match of question.matchAll(cityPattern(city.name))) {
+      const index = match.index ?? 0;
+      const after = question.slice(index + match[0].length);
+      if (/^\s+county\b/i.test(after)) continue;
+
+      hits.push({
+        name: city.name,
+        lat: city.lat,
+        lng: city.lng,
+        index,
+      });
+    }
+  }
+
+  return hits.sort((left, right) => left.index - right.index);
+}
+
+function isPlacePhrase(question: string, index: number) {
+  return /\b(?:of|near|around|in)\s+$/i.test(question.slice(0, index));
+}
+
 export function questionSearchPlace(question: string): QuestionPlace {
   const trimmed = question.trim();
-  const cities = [...SANTA_CLARA_CITY_CENTERS].sort(
-    (left, right) => right.name.length - left.name.length
-  );
+  const hits = cityHits(trimmed);
 
-  for (const city of cities) {
-    const pattern = new RegExp(
-      `\\b${city.name.replace(/\s+/g, "\\s+")}\\b`,
-      "i"
-    );
-    if (!pattern.test(trimmed)) continue;
-
+  if (hits.length > 0) {
+    const placed = hits.filter((hit) => isPlacePhrase(trimmed, hit.index));
+    const chosen = placed.length > 0 ? placed[placed.length - 1] : hits[0];
     const askedMiles = askedRadiusMiles(trimmed);
+
     return {
       kind: "known",
-      name: city.name,
-      lat: city.lat,
-      lng: city.lng,
+      name: chosen.name,
+      lat: chosen.lat,
+      lng: chosen.lng,
       radiusMiles:
         askedMiles !== null && SEARCH_RADIUS_MILES.has(askedMiles)
           ? askedMiles
@@ -147,7 +176,16 @@ function unknownPlaceName(question: string) {
 
   for (const match of question.matchAll(pattern)) {
     const name = match[1].trim();
+    const after = question.slice((match.index ?? 0) + match[0].length);
+    if (/^\s+county\b/i.test(after)) continue;
     if (PLACE_STOP.has(name.split(/\s+/)[0].toLowerCase())) continue;
+    if (
+      SANTA_CLARA_CITY_CENTERS.some(
+        (city) => city.name.toLowerCase() === name.toLowerCase()
+      )
+    ) {
+      continue;
+    }
     return name;
   }
 
@@ -167,15 +205,17 @@ const NUMBER_WORDS: Record<string, number> = {
 };
 
 function askedRadiusMiles(question: string) {
-  const fromPhrase = firstQuantity(question, "miles");
+  const fromPhrase = firstQuantity(question, "mile");
   if (fromPhrase !== null) return fromPhrase;
 
   const singular = question.match(/\b(25|10|5|3|1)\s+mile\b/i);
   return singular ? Number(singular[1]) : null;
 }
 
-function firstQuantity(question: string, unit: string) {
-  const digits = question.match(new RegExp(`(\\d+)\\s*${unit}`, "i"));
+function firstQuantity(question: string, unit: "mile" | "year") {
+  const digits = question.match(
+    new RegExp(`(\\d+)\\s*-?\\s*${unit}s?\\b`, "i")
+  );
   if (digits) {
     const value = Number(digits[1]);
     return Number.isFinite(value) ? value : null;
@@ -183,13 +223,31 @@ function firstQuantity(question: string, unit: string) {
 
   const words = question.match(
     new RegExp(
-      `(twenty-five|fifteen|twenty|ten|five|four|three|two|one)\\s+${unit}`,
+      `(twenty-five|fifteen|twenty|ten|five|four|three|two|one)\\s*-?\\s*${unit}s?\\b`,
       "i"
     )
   );
   if (!words) return null;
 
   return NUMBER_WORDS[words[1].toLowerCase()] ?? null;
+}
+
+function mileLabel(miles: number) {
+  return `${miles} ${miles === 1 ? "mile" : "miles"}`;
+}
+
+function searchLabel(miles: number) {
+  return `${miles}-mile search`;
+}
+
+function loadedRadiusNote(askedMiles: number | null, loadedMiles: number) {
+  if (askedMiles === null || askedMiles === loadedMiles) return "";
+
+  if (askedMiles > loadedMiles) {
+    return ` The loaded search covers ${mileLabel(loadedMiles)}, which is smaller than the ${mileLabel(askedMiles)} asked.`;
+  }
+
+  return ` The loaded search covers ${mileLabel(loadedMiles)}, which is larger than the ${mileLabel(askedMiles)} asked, so this list is not limited to ${mileLabel(askedMiles)}.`;
 }
 
 function parcelForPermit(
@@ -208,6 +266,8 @@ export function answerRoofingQuestion(
     radiusMiles: number | null;
     hasSearched: boolean;
     permitError?: string | null;
+    permitStatus?: "open" | "all" | null;
+    truncated?: boolean;
     now?: number;
   }
 ): AgentAnswer {
@@ -236,14 +296,15 @@ export function answerRoofingQuestion(
     };
   }
 
-  const askedMiles = firstQuantity(trimmed, "miles");
-  const askedYears = firstQuantity(trimmed, "years");
-  const asksOpenPermit = /open/i.test(trimmed) && /permit/i.test(trimmed);
-  const asksRoof = /roof/i.test(trimmed) && !asksOpenPermit;
-  const radiusNote =
-    askedMiles !== null && askedMiles > input.radiusMiles
-      ? ` The loaded search covers ${input.radiusMiles} miles, which is smaller than ${askedMiles} miles.`
-      : "";
+  const askedMiles = firstQuantity(trimmed, "mile");
+  const askedYears = firstQuantity(trimmed, "year");
+  const asksOpenPermit =
+    /\bopen\b/i.test(trimmed) && /\bpermits?\b/i.test(trimmed);
+  const asksRoof = /\broofs?\b/i.test(trimmed) && !asksOpenPermit;
+  const radiusNote = loadedRadiusNote(askedMiles, input.radiusMiles);
+  const coverageNote = input.truncated
+    ? " The county returned more parcels than this page, so this answer covers only the parcels that were loaded."
+    : "";
 
   if (!asksOpenPermit && !asksRoof) {
     return {
@@ -253,7 +314,7 @@ export function answerRoofingQuestion(
   }
 
   if (asksOpenPermit) {
-    const minimumYears = askedYears ?? 5;
+    const minimumYears = askedYears;
 
     if (input.permitError) {
       return {
@@ -262,36 +323,60 @@ export function answerRoofingQuestion(
       };
     }
 
+    const seenPermitNumbers = new Set<string>();
     const matches = input.permits.flatMap((permit) => {
-      const age = permitAgeYears(permit.issueDate, input.now);
-      const openLongEnough =
-        !permit.finalDate && age !== null && age >= minimumYears;
-      if (!openLongEnough) return [];
+      if (seenPermitNumbers.has(permit.permitNumber)) return [];
 
+      const age = permitAgeYears(permit.issueDate, input.now);
+      const open =
+        !permit.finalDate &&
+        (minimumYears === null || (age !== null && age >= minimumYears));
+      if (!open) return [];
+
+      seenPermitNumbers.add(permit.permitNumber);
       const parcel = parcelForPermit(input.parcels, permit.apn);
       if (!parcel) return [];
 
       const contractor = permit.contractorName?.trim();
+      const duration =
+        age === null
+          ? "issue date was not returned"
+          : `${age.toFixed(1)} years since issue`;
 
       return [
         {
           apn: parcel.apn,
           address: parcel.address || "Address unavailable",
-          detail: `${permit.permitNumber}: ${age.toFixed(1)} years since issue, no final date. Contractor: ${contractor || "none returned"}. ${BBB_NOTE}`,
+          detail: `${permit.permitNumber}: ${duration}, no final date. Contractor: ${contractor || "none returned"}. ${BBB_NOTE}`,
         },
       ];
     });
 
+    const layerNote =
+      input.permitStatus === "open"
+        ? " These permits are San Jose's active permit layer. Permits on the expired layer are not included."
+        : input.permitStatus === "all"
+          ? " These permits are every San Jose roofing permit returned for this search."
+          : "";
+    const loadedLabel = searchLabel(input.radiusMiles);
+    const countLabel = `${matches.length} open roofing permit${matches.length === 1 ? "" : "s"}`;
+    const found =
+      minimumYears === null
+        ? `${countLabel} in this ${loadedLabel} ${matches.length === 1 ? "has" : "have"} no final date.`
+        : `${countLabel} in this ${loadedLabel} ${matches.length === 1 ? "has" : "have"} been open at least ${minimumYears} ${minimumYears === 1 ? "year" : "years"}.`;
+    const none =
+      minimumYears === null
+        ? `No returned permit in this ${loadedLabel} is open.`
+        : `No open roofing permit in this ${loadedLabel} has been open at least ${minimumYears} ${minimumYears === 1 ? "year" : "years"}.`;
+
     return {
-      answer:
-        matches.length > 0
-          ? `${matches.length} open roofing permit${matches.length === 1 ? "" : "s"} in this ${input.radiusMiles}-mile search ${matches.length === 1 ? "has" : "have"} been open at least ${minimumYears} years.${radiusNote} ${PERMIT_BASIS} ${BBB_NOTE}`
-          : `No open roofing permit in this ${input.radiusMiles}-mile search has been open at least ${minimumYears} years.${radiusNote} ${PERMIT_BASIS} ${BBB_NOTE}`,
+      answer: `${matches.length > 0 ? found : none}${radiusNote}${coverageNote}${layerNote} ${PERMIT_BASIS} ${BBB_NOTE}`,
       matches,
     };
   }
 
   const minimumYears = askedYears ?? 15;
+  const loadedLabel = searchLabel(input.radiusMiles);
   const matches = input.parcels.flatMap((parcel) => {
     if (!meetsMinimumRoofAge(parcel.apn, minimumYears)) return [];
 
@@ -307,8 +392,8 @@ export function answerRoofingQuestion(
   return {
     answer:
       matches.length > 0
-        ? `${matches.length} ${matches.length === 1 ? "parcel has a" : "parcels have"} roof age of at least ${minimumYears} years in this ${input.radiusMiles}-mile search.${radiusNote} ${ROOF_BASIS} ${BBB_NOTE}`
-        : `No loaded parcel in this ${input.radiusMiles}-mile search has a roof age of at least ${minimumYears} years.${radiusNote} ${ROOF_BASIS} ${BBB_NOTE}`,
+        ? `${matches.length} ${matches.length === 1 ? "parcel has a" : "parcels have"} roof age of at least ${minimumYears} ${minimumYears === 1 ? "year" : "years"} in this ${loadedLabel}.${radiusNote}${coverageNote} ${ROOF_BASIS} ${BBB_NOTE}`
+        : `No loaded parcel in this ${loadedLabel} has a roof age of at least ${minimumYears} ${minimumYears === 1 ? "year" : "years"}.${radiusNote}${coverageNote} ${ROOF_BASIS} ${BBB_NOTE}`,
     matches,
   };
 }
