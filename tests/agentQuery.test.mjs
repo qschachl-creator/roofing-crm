@@ -94,6 +94,7 @@ test("agent lists open permits older than five years in the loaded search", () =
   assert.equal(answer.matches[0].apn, "67620085");
   assert.match(answer.matches[0].detail, /ROYAL KNIGHT ROOFING CO INC/);
   assert.match(answer.answer, /BBB rating is unavailable/);
+  assert.match(answer.answer, /Open means no final date/);
   assert.equal(answer.answer.includes("smaller than 5 miles"), false);
 });
 
@@ -115,6 +116,7 @@ test("agent lists roofs at least 15 years old and notes a larger asked radius", 
   );
   assert.match(answer.answer, /smaller than 10 miles/);
   assert.match(answer.matches[0].detail, /16 years old, replaced 2010-06-01/);
+  assert.match(answer.answer, /published snapshot/);
 });
 
 test("a known city resolves to coordinates and an unknown city does not", () => {

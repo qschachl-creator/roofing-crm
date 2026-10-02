@@ -17,6 +17,7 @@ import {
   installRoofAgeSnapshot,
   parcelsMeetingMinimumRoofAge,
   roofAgeCardLabel,
+  roofAgeSourceLabel,
   undashedApn,
   type RoofAgeSnapshotRow,
 } from "@/lib/roofAgeProof";
@@ -968,12 +969,26 @@ function SelectedParcelDetail({
         {parcel.jurisdiction || "Jurisdiction unavailable"}
       </p>
       <p className={styles.detailContext}>{roofAgeCardLabel(parcel.apn)}</p>
+      <p className={styles.detailContext}>{roofAgeSourceLabel(parcel.apn)}</p>
+      <p className={styles.detailContext}>
+        {parcel.latitude !== null && parcel.longitude !== null
+          ? `Coordinates ${parcel.latitude.toFixed(5)}, ${parcel.longitude.toFixed(5)}`
+          : "Coordinates were not returned for this parcel."}
+      </p>
+      <p className={styles.detailContext}>
+        Location source: Santa Clara County parcel records.
+      </p>
 
       {permitView.noPermitMessage ? (
         <p className={styles.detailValue}>{permitView.noPermitMessage}</p>
       ) : (
         <div className={styles.permitDetails}>
-          {permitView.permits.map((detail) => (
+          {permitView.permits.map((detail) => {
+            const layerName = permits.find(
+              (permit) => permit.permitNumber === detail.permitNumber
+            )?.layerName;
+
+            return (
             <section key={detail.permitNumber} className={styles.permitDetail}>
               <h4>{detail.permitNumber}</h4>
               <dl>
@@ -994,9 +1009,17 @@ function SelectedParcelDetail({
                   <dt>Contractor</dt>
                   <dd>{detail.contractorLabel}</dd>
                 </div>
+                <div>
+                  <dt>Permit source</dt>
+                  <dd>
+                    San Jose building permits
+                    {layerName ? `, ${layerName}` : ""}
+                  </dd>
+                </div>
               </dl>
             </section>
-          ))}
+            );
+          })}
         </div>
       )}
 

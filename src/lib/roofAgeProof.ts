@@ -64,6 +64,19 @@ export function roofAgeCardLabel(apn: string) {
   return `${age}, ${replaced}, ${permit}`;
 }
 
+export function roofAgeSourceLabel(apn: string) {
+  const proof = roofAgeSnapshotRow(apn);
+  if (
+    !proof ||
+    proof.roof_age_source !== "permit_updated" ||
+    proof.roof_age_years === null
+  ) {
+    return "Roof age source: the published snapshot has no dated roof replacement for this parcel.";
+  }
+
+  return "Roof age source: the published snapshot of a completed San Jose re-roof permit.";
+}
+
 export function meetsMinimumRoofAge(apn: string, minimumYears: number) {
   const years = roofAgeSnapshotRow(apn)?.roof_age_years;
   return typeof years === "number" && years >= minimumYears;

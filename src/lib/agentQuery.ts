@@ -30,6 +30,10 @@ export type AgentAnswer = {
 };
 
 const BBB_NOTE = "BBB rating is unavailable in the current data.";
+const ROOF_BASIS =
+  "Roof age is the years since the completed re-roof date in the published snapshot.";
+const PERMIT_BASIS =
+  "Open means no final date. Duration is the years since the San Jose issue date. The contractor is the name on that permit.";
 
 export const SANTA_CLARA_CITY_CENTERS = [
   { name: "San Jose", lat: 37.3382, lng: -121.8863 },
@@ -281,8 +285,8 @@ export function answerRoofingQuestion(
     return {
       answer:
         matches.length > 0
-          ? `${matches.length} open roofing permit${matches.length === 1 ? "" : "s"} in this ${input.radiusMiles}-mile search ${matches.length === 1 ? "has" : "have"} been open at least ${minimumYears} years.${radiusNote} ${BBB_NOTE}`
-          : `No open roofing permit in this ${input.radiusMiles}-mile search has been open at least ${minimumYears} years.${radiusNote} ${BBB_NOTE}`,
+          ? `${matches.length} open roofing permit${matches.length === 1 ? "" : "s"} in this ${input.radiusMiles}-mile search ${matches.length === 1 ? "has" : "have"} been open at least ${minimumYears} years.${radiusNote} ${PERMIT_BASIS} ${BBB_NOTE}`
+          : `No open roofing permit in this ${input.radiusMiles}-mile search has been open at least ${minimumYears} years.${radiusNote} ${PERMIT_BASIS} ${BBB_NOTE}`,
       matches,
     };
   }
@@ -303,8 +307,8 @@ export function answerRoofingQuestion(
   return {
     answer:
       matches.length > 0
-        ? `${matches.length} ${matches.length === 1 ? "parcel has a" : "parcels have"} roof age of at least ${minimumYears} years in this ${input.radiusMiles}-mile search.${radiusNote} ${BBB_NOTE}`
-        : `No loaded parcel in this ${input.radiusMiles}-mile search has a roof age of at least ${minimumYears} years.${radiusNote} ${BBB_NOTE}`,
+        ? `${matches.length} ${matches.length === 1 ? "parcel has a" : "parcels have"} roof age of at least ${minimumYears} years in this ${input.radiusMiles}-mile search.${radiusNote} ${ROOF_BASIS} ${BBB_NOTE}`
+        : `No loaded parcel in this ${input.radiusMiles}-mile search has a roof age of at least ${minimumYears} years.${radiusNote} ${ROOF_BASIS} ${BBB_NOTE}`,
     matches,
   };
 }

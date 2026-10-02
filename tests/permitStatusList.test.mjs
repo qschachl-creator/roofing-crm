@@ -280,6 +280,14 @@ test("selected parcel view shows permit status, duration, contractor, and unavai
   assert.match(dashboardSource, /detail\.longOpen/);
   assert.match(dashboardSource, /\{permitView\.noPermitMessage\}/);
   assert.match(dashboardSource, /\{permitView\.bbbRating\}/);
+  assert.match(dashboardSource, /roofAgeSourceLabel\(parcel\.apn\)/);
+  assert.match(dashboardSource, /Coordinates \$\{parcel\.latitude\.toFixed\(5\)\}/);
+  assert.match(
+    dashboardSource,
+    /Location source: Santa Clara County parcel records\./
+  );
+  assert.match(dashboardSource, /Permit source/);
+  assert.match(dashboardSource, /San Jose building permits/);
   assert.match(dashboardSource, /selectParcel\(parcel\.objectId\)/);
   assert.equal(dashboardSource.includes("OBJECTID"), false);
   assert.equal(dashboardSource.includes("contractor source"), false);
