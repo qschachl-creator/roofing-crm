@@ -114,7 +114,7 @@ test("agent lists roofs at least 15 years old and notes a larger asked radius", 
     ["67620085"]
   );
   assert.match(answer.answer, /smaller than 10 miles/);
-  assert.match(answer.matches[0].detail, /roof_age_years 16/);
+  assert.match(answer.matches[0].detail, /16 years old, replaced 2010-06-01/);
 });
 
 test("a known city resolves to coordinates and an unknown city does not", () => {
@@ -177,4 +177,25 @@ test("a known city resolves to coordinates and an unknown city does not", () => 
   assert.match(dashboardSource, /lat: place\.lat/);
   assert.match(dashboardSource, /lng: place\.lng/);
   assert.match(dashboardSource, /searchProperties\(center, miles\)/);
+});
+
+test("agent match clicks select the loaded parcel and copy is present tense", () => {
+  assert.match(
+    dashboardSource,
+    /The question box answers from loaded parcels and permits\./
+  );
+  assert.equal(
+    dashboardSource.includes("Natural-language queries will retrieve"),
+    false
+  );
+  assert.match(
+    dashboardSource,
+    /Roof age loaded from the published snapshot/
+  );
+  assert.equal(dashboardSource.includes("Oracle enrichment pending"), false);
+  assert.match(dashboardSource, /const parcel = parcelByApn\(match\.apn\)/);
+  assert.match(
+    dashboardSource,
+    /parcelByApn\(match\.apn\)[\s\S]*selectParcel\(parcel\.objectId\)/
+  );
 });

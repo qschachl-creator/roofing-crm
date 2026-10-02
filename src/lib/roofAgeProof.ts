@@ -1,4 +1,5 @@
-export const PENDING_ROOF_AGE_LABEL = "Roof age: pending source enrichment";
+export const PENDING_ROOF_AGE_LABEL =
+  "There is no publicly available data for the roof age.";
 
 export type RoofAgeSnapshotRow = {
   parcel_identifier: string;
@@ -40,22 +41,27 @@ export function roofAgeSnapshotRow(apn: string) {
   return roofAgeByUndashedApn[undashedApn(apn)];
 }
 
-function shown(value: string | number | null) {
-  return value === null ? "null" : String(value);
-}
-
 export function roofAgeCardLabel(apn: string) {
   const proof = roofAgeSnapshotRow(apn);
   if (!proof) return PENDING_ROOF_AGE_LABEL;
 
-  return [
-    `Roof age: roof_date ${shown(proof.roof_date)}`,
-    `roof_age_years ${shown(proof.roof_age_years)}`,
-    `roof_age_source ${proof.roof_age_source}`,
-    `roof_age_confidence ${proof.roof_age_confidence}`,
-    `roof_age_permit_id ${shown(proof.roof_age_permit_id)}`,
-    `roof_age_eligibility_reason ${proof.roof_age_eligibility_reason}`,
-  ].join(" · ");
+  if (
+    proof.roof_age_eligibility_reason === "no_valid_anchor" ||
+    proof.roof_age_years === null
+  ) {
+    return PENDING_ROOF_AGE_LABEL;
+  }
+
+  const years = proof.roof_age_years;
+  const age = `${years} ${years === 1 ? "year" : "years"} old`;
+  const replaced = proof.roof_date
+    ? `replaced ${proof.roof_date}`
+    : "replacement date unavailable";
+  const permit = proof.roof_age_permit_id
+    ? `permit ${proof.roof_age_permit_id}`
+    : "permit number unavailable";
+
+  return `${age}, ${replaced}, ${permit}`;
 }
 
 export function meetsMinimumRoofAge(apn: string, minimumYears: number) {

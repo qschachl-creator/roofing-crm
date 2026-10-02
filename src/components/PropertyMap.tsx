@@ -22,6 +22,15 @@ const PARCEL_DOT_STYLE: PathOptions = {
   fillColor: "#ffffff",
   fillOpacity: 0.9,
   weight: 2,
+  className: "parcel-dot",
+};
+
+const SELECTED_PARCEL_DOT_STYLE: PathOptions = {
+  color: "#111820",
+  fillColor: "#111820",
+  fillOpacity: 1,
+  weight: 2,
+  className: "parcel-dot",
 };
 
 const RADIUS_STYLE: PathOptions = {
@@ -48,6 +57,11 @@ const pinIcon = L.divIcon({
   iconAnchor: [14, 28],
 });
 
+function isParcelDotClick(event: LeafletMouseEvent) {
+  const target = event.originalEvent.target;
+  return target instanceof Element && Boolean(target.closest(".parcel-dot"));
+}
+
 function PinController({
   onPin,
 }: {
@@ -55,6 +69,8 @@ function PinController({
 }) {
   useMapEvents({
     click(event: LeafletMouseEvent) {
+      if (isParcelDotClick(event)) return;
+
       onPin({
         lat: event.latlng.lat,
         lng: event.latlng.lng,
@@ -109,7 +125,15 @@ function SearchOverlay({
   );
 }
 
-function ParcelDot({ parcel }: { parcel: ParcelMapPoint }) {
+function ParcelDot({
+  parcel,
+  selected,
+  onSelect,
+}: {
+  parcel: ParcelMapPoint;
+  selected: boolean;
+  onSelect: (objectId: string) => void;
+}) {
   const latitude = parcel.latitude;
   const longitude = parcel.longitude;
   const position = useMemo<LatLngExpression | null>(() => {
@@ -127,8 +151,14 @@ function ParcelDot({ parcel }: { parcel: ParcelMapPoint }) {
   return (
     <CircleMarker
       center={position}
-      radius={5}
-      pathOptions={PARCEL_DOT_STYLE}
+      radius={selected ? 8 : 6}
+      pathOptions={selected ? SELECTED_PARCEL_DOT_STYLE : PARCEL_DOT_STYLE}
+      eventHandlers={{
+        click(event) {
+          L.DomEvent.stop(event);
+          onSelect(parcel.objectId);
+        },
+      }}
     >
       <Tooltip>
         <strong>APN {parcel.apn}</strong>
@@ -143,7 +173,9 @@ export default function PropertyMap({
   radiusMiles,
   searchCenter,
   parcels,
+  selectedObjectId,
   onSearchCenterChange,
+  onParcelSelect,
 }: MapClientProps) {
   const radiusMeters = radiusMiles * 1609.344;
 
@@ -177,7 +209,12 @@ export default function PropertyMap({
         ) : null}
 
         {parcels.map((parcel) => (
-          <ParcelDot key={parcel.objectId} parcel={parcel} />
+          <ParcelDot
+            key={parcel.objectId}
+            parcel={parcel}
+            selected={parcel.objectId === selectedObjectId}
+            onSelect={onParcelSelect}
+          />
         ))}
       </MapContainer>
     </div>

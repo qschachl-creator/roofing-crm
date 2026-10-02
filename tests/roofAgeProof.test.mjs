@@ -11,7 +11,9 @@ import {
 } from "../src/lib/roofAgeProof.ts";
 import { ROOF_AGE_SNAPSHOT_PATH } from "../src/lib/roofAgeSnapshotPath.ts";
 
-const PENDING = "Roof age: pending source enrichment";
+process.env.ROOF_AGE_SNAPSHOT_FILE = ROOF_AGE_SNAPSHOT_PATH;
+
+const PENDING = "There is no publicly available data for the roof age.";
 const dashboardSource = readFileSync(
   new URL("../src/components/CrmDashboard.tsx", import.meta.url),
   "utf8"
@@ -20,28 +22,37 @@ const snapshot = JSON.parse(readFileSync(ROOF_AGE_SNAPSHOT_PATH, "utf8"));
 installRoofAgeSnapshot(snapshot.parcels);
 
 function labelFromSnapshotRow(row) {
-  const shown = (value) => (value === null ? "null" : String(value));
-  return [
-    `Roof age: roof_date ${shown(row.roof_date)}`,
-    `roof_age_years ${shown(row.roof_age_years)}`,
-    `roof_age_source ${row.roof_age_source}`,
-    `roof_age_confidence ${row.roof_age_confidence}`,
-    `roof_age_permit_id ${shown(row.roof_age_permit_id)}`,
-    `roof_age_eligibility_reason ${row.roof_age_eligibility_reason}`,
-  ].join(" · ");
+  if (
+    row.roof_age_eligibility_reason === "no_valid_anchor" ||
+    row.roof_age_years === null
+  ) {
+    return "There is no publicly available data for the roof age.";
+  }
+
+  const age = `${row.roof_age_years} ${
+    row.roof_age_years === 1 ? "year" : "years"
+  } old`;
+  const replaced = row.roof_date
+    ? `replaced ${row.roof_date}`
+    : "replacement date unavailable";
+  const permit = row.roof_age_permit_id
+    ? `permit ${row.roof_age_permit_id}`
+    : "permit number unavailable";
+
+  return `${age}, ${replaced}, ${permit}`;
 }
 
 test("three proven APNs render Oracle roof-age fields", () => {
   const recent = roofAgeCardLabel("09241022");
   assert.equal(
     recent,
-    "Roof age: roof_date 2026-09-12 · roof_age_years 0 · roof_age_source permit_updated · roof_age_confidence high · roof_age_permit_id 2026-135571-RS · roof_age_eligibility_reason accepted_completed_primary_roof_replacement"
+    "0 years old, replaced 2026-09-12, permit 2026-135571-RS"
   );
 
   const unanchored = roofAgeCardLabel("68958007");
   assert.equal(
     unanchored,
-    "Roof age: roof_date null · roof_age_years null · roof_age_source none · roof_age_confidence none · roof_age_permit_id null · roof_age_eligibility_reason no_valid_anchor"
+    "There is no publicly available data for the roof age."
   );
   assert.equal(unanchored.includes("1997-10-22"), false);
   assert.equal(unanchored.includes("1997"), false);
@@ -49,7 +60,7 @@ test("three proven APNs render Oracle roof-age fields", () => {
   const older = roofAgeCardLabel("67620085");
   assert.equal(
     older,
-    "Roof age: roof_date 2010-06-01 · roof_age_years 16 · roof_age_source permit_updated · roof_age_confidence high · roof_age_permit_id 2010-012446-RS · roof_age_eligibility_reason accepted_completed_primary_roof_replacement"
+    "16 years old, replaced 2010-06-01, permit 2010-012446-RS"
   );
 
   assert.match(dashboardSource, /\{roofAgeCardLabel\(parcel\.apn\)\}/);
@@ -301,7 +312,10 @@ test("qualifying parcel past the first within_circle page is merged", async () =
       snapshot.parcels["68958007"].roof_age_eligibility_reason,
       "no_valid_anchor"
     );
-    assert.match(roofAgeCardLabel("68958007"), /no_valid_anchor/);
+    assert.equal(
+      roofAgeCardLabel("68958007"),
+      "There is no publicly available data for the roof age."
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

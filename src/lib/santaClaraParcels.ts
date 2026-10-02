@@ -1,11 +1,8 @@
-import { readFileSync } from "node:fs";
+import { loadRoofAgeSnapshot } from "./loadRoofAgeSnapshot.ts";
 import {
-  installRoofAgeSnapshot,
   meetsMinimumRoofAge,
   undashedApn,
-  type RoofAgeSnapshotFile,
 } from "./roofAgeProof.ts";
-import { ROOF_AGE_SNAPSHOT_PATH } from "./roofAgeSnapshotPath.ts";
 
 const DATASET_URL = "https://data.sccgov.org/resource/ubcd-cewv.json";
 const DATASET_ID = "ubcd-cewv";
@@ -137,16 +134,12 @@ function withinCircleWhere(
 
 let snapshotApnsMeetingMinimumRoofAge: readonly string[] | null = null;
 
-function qualifyingSnapshotApns() {
+async function qualifyingSnapshotApns() {
   if (snapshotApnsMeetingMinimumRoofAge) {
     return snapshotApnsMeetingMinimumRoofAge;
   }
 
-  const snapshot = JSON.parse(
-    readFileSync(ROOF_AGE_SNAPSHOT_PATH, "utf8")
-  ) as RoofAgeSnapshotFile;
-
-  installRoofAgeSnapshot(snapshot.parcels);
+  const snapshot = await loadRoofAgeSnapshot();
   snapshotApnsMeetingMinimumRoofAge = Object.keys(snapshot.parcels).filter(
     (apn) => meetsMinimumRoofAge(apn, MINIMUM_ROOF_AGE_YEARS)
   );
@@ -252,7 +245,7 @@ async function searchQualifyingRoofAgeParcelsInCircle({
   longitude: number;
   radiusMeters: number;
 }) {
-  const apns = qualifyingSnapshotApns().map(quotedDatasetApn);
+  const apns = (await qualifyingSnapshotApns()).map(quotedDatasetApn);
   if (apns.length === 0) return [];
 
   return querySantaClaraParcels(

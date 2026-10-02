@@ -24,6 +24,10 @@ const dashboardSource = readFileSync(
   new URL("../src/components/CrmDashboard.tsx", import.meta.url),
   "utf8"
 );
+const mapSource = readFileSync(
+  new URL("../src/components/PropertyMap.tsx", import.meta.url),
+  "utf8"
+);
 const candidateListSource = readFileSync(
   new URL("../src/lib/candidateList.ts", import.meta.url),
   "utf8"
@@ -113,7 +117,10 @@ test("open permit status keeps open permits without a roof age and all keeps roo
     snapshot.parcels["68958007"].roof_age_eligibility_reason,
     "no_valid_anchor"
   );
-  assert.match(roofAgeCardLabel("68958007"), /no_valid_anchor/);
+  assert.equal(
+    roofAgeCardLabel("68958007"),
+    "There is no publicly available data for the roof age."
+  );
   assert.match(
     dashboardSource,
     /parcelsMeetingMinimumRoofAge\(parcels, roofAge\)/
@@ -213,7 +220,10 @@ test("long-open emphasis uses a final date and an issue age of at least five yea
     candidateListSource,
     /!finalDate && age !== null && age >= 5/
   );
-  assert.match(dashboardSource, /isLongOpenPermit\(permit\.finalDate, age\)/);
+  assert.match(
+    dashboardSource,
+    /permitView\.permits\.some\(\(detail\) => detail\.longOpen\)/
+  );
   assert.match(dashboardSource, /styles\.longOpen/);
   assert.match(dashboardSource, />\s*Long-open\s*</);
   assert.match(dashboardSource, /styles\.candidateCardLongOpen/);
@@ -270,7 +280,14 @@ test("selected parcel view shows permit status, duration, contractor, and unavai
   assert.match(dashboardSource, /detail\.longOpen/);
   assert.match(dashboardSource, /\{permitView\.noPermitMessage\}/);
   assert.match(dashboardSource, /\{permitView\.bbbRating\}/);
-  assert.match(dashboardSource, /setSelectedObjectId\(parcel\.objectId\)/);
+  assert.match(dashboardSource, /selectParcel\(parcel\.objectId\)/);
+  assert.equal(dashboardSource.includes("OBJECTID"), false);
+  assert.equal(dashboardSource.includes("contractor source"), false);
+  assert.match(dashboardSource, /\{detail\.permitNumber\}/);
+  assert.match(dashboardSource, /\{parcel\.jurisdiction \|\| "Jurisdiction unavailable"\}/);
+  assert.match(dashboardSource, /Reset pin/);
+  assert.match(mapSource, /L\.DomEvent\.stop\(event\)/);
+  assert.match(mapSource, /isParcelDotClick\(event\)/);
   assert.match(dashboardSource, /Back to radius list/);
   assert.match(dashboardSource, /setSelectedObjectId\(null\)/);
   assert.equal(dashboardSource.includes("bbb.org"), false);

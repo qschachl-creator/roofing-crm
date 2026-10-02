@@ -19,7 +19,9 @@ export type MapClientProps = {
   radiusMiles: number;
   searchCenter: SearchCenter | null;
   parcels: ParcelMapPoint[];
+  selectedObjectId: string | null;
   onSearchCenterChange: (center: SearchCenter) => void;
+  onParcelSelect: (objectId: string) => void;
 };
 
 const PropertyMap = dynamic<MapClientProps>(() => import("./PropertyMap"), {

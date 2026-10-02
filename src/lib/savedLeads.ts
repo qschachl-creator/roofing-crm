@@ -1,10 +1,20 @@
 export const SAVED_LEADS_STORAGE_KEY = "roofing-crm-saved-leads";
 
+export type SavedLeadPermit = {
+  permitNumber: string;
+  status: string;
+  openDuration: string;
+  contractor: string;
+  longOpen: boolean;
+};
+
 export type SavedLead = {
   objectId: string;
   apn: string;
   address: string;
   jurisdiction: string | null;
+  roofAgeSentence?: string;
+  permits?: SavedLeadPermit[];
 };
 
 const EMPTY_LEADS: SavedLead[] = [];
@@ -57,18 +67,65 @@ export function parseSavedLeads(raw: string | null): SavedLead[] {
 
   if (!Array.isArray(parsed)) return [];
 
-  return parsed.filter(isSavedLead);
+  return parsed.flatMap((value) => {
+    const lead = parseSavedLead(value);
+    return lead ? [lead] : [];
+  });
 }
 
-function isSavedLead(value: unknown): value is SavedLead {
-  if (!value || typeof value !== "object") return false;
+function parseSavedLead(value: unknown): SavedLead | null {
+  if (!value || typeof value !== "object") return null;
 
   const lead = value as Record<string, unknown>;
+  const jurisdiction = lead.jurisdiction;
+  if (
+    typeof lead.objectId !== "string" ||
+    typeof lead.apn !== "string" ||
+    typeof lead.address !== "string" ||
+    (jurisdiction !== null && typeof jurisdiction !== "string")
+  ) {
+    return null;
+  }
 
-  return (
-    typeof lead.objectId === "string" &&
-    typeof lead.apn === "string" &&
-    typeof lead.address === "string" &&
-    (lead.jurisdiction === null || typeof lead.jurisdiction === "string")
-  );
+  const saved: SavedLead = {
+    objectId: lead.objectId,
+    apn: lead.apn,
+    address: lead.address,
+    jurisdiction,
+  };
+
+  if (typeof lead.roofAgeSentence === "string") {
+    saved.roofAgeSentence = lead.roofAgeSentence;
+  }
+
+  if (Array.isArray(lead.permits)) {
+    saved.permits = lead.permits.flatMap((permit) => {
+      const parsed = parseSavedPermit(permit);
+      return parsed ? [parsed] : [];
+    });
+  }
+
+  return saved;
+}
+
+function parseSavedPermit(value: unknown): SavedLeadPermit | null {
+  if (!value || typeof value !== "object") return null;
+
+  const permit = value as Record<string, unknown>;
+  if (
+    typeof permit.permitNumber !== "string" ||
+    typeof permit.status !== "string" ||
+    typeof permit.openDuration !== "string" ||
+    typeof permit.contractor !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    permitNumber: permit.permitNumber,
+    status: permit.status,
+    openDuration: permit.openDuration,
+    contractor: permit.contractor,
+    longOpen: permit.longOpen === true,
+  };
 }

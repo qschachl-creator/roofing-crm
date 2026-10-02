@@ -9,9 +9,7 @@ import {
 } from "@/lib/agentQuery";
 import {
   apnBatches,
-  isLongOpenPermit,
   parcelsForPermitStatus,
-  permitAgeYears,
   selectedParcelPermitView,
   sortParcelsLongOpenFirst,
 } from "@/lib/candidateList";
@@ -19,6 +17,7 @@ import {
   installRoofAgeSnapshot,
   parcelsMeetingMinimumRoofAge,
   roofAgeCardLabel,
+  undashedApn,
   type RoofAgeSnapshotRow,
 } from "@/lib/roofAgeProof";
 import {
@@ -26,6 +25,7 @@ import {
   savedLeadsServerSnapshot,
   subscribeSavedLeads,
   writeSavedLeads,
+  type SavedLead,
 } from "@/lib/savedLeads";
 
 type SearchCenter = {
@@ -158,8 +158,7 @@ export default function CrmDashboard({
     listedBeforeDuration.length > 0 &&
     permitListed.length === 0;
   const selectedParcel = selectedObjectId
-    ? (listedParcels.find((parcel) => parcel.objectId === selectedObjectId) ??
-      null)
+    ? (parcels.find((parcel) => parcel.objectId === selectedObjectId) ?? null)
     : null;
 
   function navigateToSection(section: "explore" | "leads" | "agent") {
@@ -168,6 +167,24 @@ export default function CrmDashboard({
       behavior: "smooth",
       block: "start",
     });
+  }
+
+  function selectParcel(objectId: string) {
+    setSelectedObjectId(objectId);
+    setActiveSection("explore");
+  }
+
+  function resetPin() {
+    setSearchCenter(null);
+    setParcels([]);
+    setRoofingPermits([]);
+    setPermitError(null);
+    setHasSearched(false);
+    setSearchError(null);
+    setSelectedObjectId(null);
+    setMapTruncated(false);
+    setAgentAnswer(null);
+    setLocationMessage("Click the map or use your current location.");
   }
 
   function updateSearchCenter(center: SearchCenter) {
@@ -289,11 +306,28 @@ export default function CrmDashboard({
     void loadPermits(sanJoseApnsFrom(parcels), status);
   }
 
+  function parcelByObjectId(objectId: string) {
+    return parcels.find((parcel) => parcel.objectId === objectId) ?? null;
+  }
+
+  function parcelByApn(apn: string) {
+    const key = undashedApn(apn);
+    return parcels.find((parcel) => undashedApn(parcel.apn) === key) ?? null;
+  }
+
+  function parcelForSavedLead(lead: SavedLead) {
+    return parcelByObjectId(lead.objectId) ?? parcelByApn(lead.apn);
+  }
+
   function saveLead(parcel: ParcelResult) {
     if (leads.some((lead) => lead.apn === parcel.apn)) {
       setActiveSection("leads");
       return;
     }
+
+    const permitView = selectedParcelPermitView(
+      roofingPermits.filter((permit) => permit.apn === parcel.apn)
+    );
 
     writeSavedLeads([
       ...leads,
@@ -302,6 +336,14 @@ export default function CrmDashboard({
         apn: parcel.apn,
         address: parcel.address,
         jurisdiction: parcel.jurisdiction,
+        roofAgeSentence: roofAgeCardLabel(parcel.apn),
+        permits: permitView.permits.map((detail) => ({
+          permitNumber: detail.permitNumber,
+          status: detail.status,
+          openDuration: detail.durationLabel,
+          contractor: detail.contractorLabel,
+          longOpen: detail.longOpen,
+        })),
       },
     ]);
     setActiveSection("leads");
@@ -459,7 +501,7 @@ export default function CrmDashboard({
 
         <div className={styles.sourceStatus}>
           <span className={styles.statusDot} />
-          County GIS connected · Oracle enrichment pending
+          County GIS connected · Roof age loaded from the published snapshot
         </div>
       </aside>
 
@@ -540,15 +582,25 @@ export default function CrmDashboard({
             </select>
           </label>
 
-          <button
-            className={styles.primaryButton}
-            disabled={!searchCenter || isSearching}
-            onClick={() => {
-              void searchProperties();
-            }}
-          >
-            {isSearching ? "Searching…" : "Search properties"}
-          </button>
+          <div className={styles.searchActions}>
+            <button
+              className={styles.primaryButton}
+              disabled={!searchCenter || isSearching}
+              onClick={() => {
+                void searchProperties();
+              }}
+            >
+              {isSearching ? "Searching…" : "Search properties"}
+            </button>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              disabled={!searchCenter || isSearching}
+              onClick={resetPin}
+            >
+              Reset pin
+            </button>
+          </div>
         </section>
 
         <div className={styles.dashboard}>
@@ -566,7 +618,9 @@ export default function CrmDashboard({
                 radiusMiles={radiusMiles}
                 searchCenter={searchCenter}
                 parcels={parcels}
+                selectedObjectId={selectedObjectId}
                 onSearchCenterChange={updateSearchCenter}
+                onParcelSelect={selectParcel}
               />
               <span>{locationMessage}</span>
               {hasSearched && mapTruncated ? (
@@ -611,32 +665,80 @@ export default function CrmDashboard({
             {activeSection === "leads" ? (
               leads.length > 0 ? (
                 <div className={styles.candidateList}>
-                  {leads.map((lead) => (
-                    <article
-                      className={styles.candidateCard}
-                      key={lead.objectId}
-                    >
-                      <div className={styles.candidateCardHeader}>
-                        <strong>{lead.address || "Address unavailable"}</strong>
-                        <span>APN {lead.apn}</span>
-                      </div>
-                      <p>
-                        {lead.jurisdiction || "Jurisdiction unavailable"} ·{" "}
-                        {roofAgeCardLabel(lead.apn)}
-                      </p>
-                      <button
-                        type="button"
-                        className={styles.secondaryButton}
-                        onClick={() =>
-                          writeSavedLeads(
-                            leads.filter((item) => item.apn !== lead.apn)
-                          )
+                  {leads.map((lead) => {
+                    const parcel = parcelForSavedLead(lead);
+                    const savedPermits = lead.permits ?? [];
+                    const summary = (
+                      <>
+                        <div className={styles.candidateCardHeader}>
+                          <strong>
+                            {lead.address || "Address unavailable"}
+                          </strong>
+                          <span>APN {lead.apn}</span>
+                        </div>
+                        <p>{lead.jurisdiction || "Jurisdiction unavailable"}</p>
+                        <p>
+                          {lead.roofAgeSentence ?? roofAgeCardLabel(lead.apn)}
+                        </p>
+                        {savedPermits.length > 0 ? (
+                          <div className={styles.candidateMeta}>
+                            {savedPermits.map((permit) => (
+                              <div
+                                key={permit.permitNumber}
+                                className={styles.permitLine}
+                              >
+                                <span>
+                                  <strong>{permit.permitNumber}</strong>
+                                </span>
+                                <span>{permit.status}</span>
+                                <span>{permit.openDuration}</span>
+                                <span>{permit.contractor}</span>
+                                {permit.longOpen ? (
+                                  <span className={styles.longOpen}>
+                                    Long-open
+                                  </span>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </>
+                    );
+
+                    return (
+                      <article
+                        className={
+                          savedPermits.some((permit) => permit.longOpen)
+                            ? `${styles.candidateCard} ${styles.candidateCardLongOpen}`
+                            : styles.candidateCard
                         }
+                        key={lead.apn}
                       >
-                        Remove lead
-                      </button>
-                    </article>
-                  ))}
+                        {parcel ? (
+                          <button
+                            type="button"
+                            className={styles.leadOpen}
+                            onClick={() => selectParcel(parcel.objectId)}
+                          >
+                            {summary}
+                          </button>
+                        ) : (
+                          summary
+                        )}
+                        <button
+                          type="button"
+                          className={styles.secondaryButton}
+                          onClick={() =>
+                            writeSavedLeads(
+                              leads.filter((item) => item.apn !== lead.apn)
+                            )
+                          }
+                        >
+                          Remove lead
+                        </button>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className={styles.emptyState}>
@@ -671,24 +773,20 @@ export default function CrmDashboard({
             ) : listedParcels.length > 0 ? (
               <div className={styles.candidateList}>
                 {listedParcels.map((parcel) => {
-                  const permitLines = roofingPermits
-                    .filter((permit) => permit.apn === parcel.apn)
-                    .map((permit) => {
-                      const age = permitAgeYears(permit.issueDate);
-                      const longOpen = isLongOpenPermit(permit.finalDate, age);
-                      return { permit, age, longOpen };
-                    });
+                  const permitView = selectedParcelPermitView(
+                    roofingPermits.filter((permit) => permit.apn === parcel.apn)
+                  );
 
                   return (
                     <button
                       type="button"
                       className={
-                        permitLines.some((line) => line.longOpen)
+                        permitView.permits.some((detail) => detail.longOpen)
                           ? `${styles.candidateCard} ${styles.candidateCardLongOpen}`
                           : styles.candidateCard
                       }
                       key={parcel.objectId}
-                      onClick={() => setSelectedObjectId(parcel.objectId)}
+                      onClick={() => selectParcel(parcel.objectId)}
                     >
                       <div className={styles.candidateCardHeader}>
                         <strong>
@@ -697,39 +795,26 @@ export default function CrmDashboard({
                         <span>APN {parcel.apn}</span>
                       </div>
 
-                      <p>
-                        {parcel.jurisdiction || "Jurisdiction unavailable"} ·
-                        OBJECTID {parcel.objectId}
-                      </p>
+                      <p>{parcel.jurisdiction || "Jurisdiction unavailable"}</p>
+                      <p>{roofAgeCardLabel(parcel.apn)}</p>
 
                       <div className={styles.candidateMeta}>
-                        <span>{roofAgeCardLabel(parcel.apn)}</span>
-
-                        {permitLines.length === 0 ? (
+                        {permitView.permits.length === 0 ? (
                           <span>
                             Roofing permit: none returned for selected filter
                           </span>
                         ) : (
-                          permitLines.map(({ permit, age, longOpen }) => (
+                          permitView.permits.map((detail) => (
                             <div
-                              key={permit.permitNumber}
+                              key={detail.permitNumber}
                               className={styles.permitLine}
                             >
                               <span>
-                                <strong>{permit.permitNumber}</strong>
-                                {" · "}
-                                {permit.status || permit.layerName}
-                                {permit.issueDate
-                                  ? ` · issued ${permit.issueDate}`
-                                  : ""}
-                                {age !== null
-                                  ? ` · ${age.toFixed(1)} years since issue`
-                                  : ""}
-                                {permit.contractorName
-                                  ? ` · contractor source: ${permit.contractorName}`
-                                  : ""}
+                                <strong>{detail.permitNumber}</strong>
                               </span>
-                              {longOpen ? (
+                              <span>{detail.durationLabel}</span>
+                              <span>{detail.contractorLabel}</span>
+                              {detail.longOpen ? (
                                 <span className={styles.longOpen}>
                                   Long-open
                                 </span>
@@ -776,8 +861,7 @@ export default function CrmDashboard({
             <p className={styles.eyebrow}>RAG agent</p>
             <h3>Ask about roofing opportunities</h3>
             <p className={styles.subtle}>
-              Natural-language queries will retrieve matching property and
-              permit records before generating an answer.
+              The question box answers from loaded parcels and permits.
             </p>
           </div>
 
@@ -801,14 +885,33 @@ export default function CrmDashboard({
               <p>{agentAnswer.answer}</p>
               {agentAnswer.matches.length > 0 ? (
                 <ul>
-                  {agentAnswer.matches.map((match) => (
-                    <li key={`${match.apn}-${match.detail}`}>
-                      <strong>
-                        {match.address} · APN {match.apn}
-                      </strong>
-                      <span>{match.detail}</span>
-                    </li>
-                  ))}
+                  {agentAnswer.matches.map((match) => {
+                    const parcel = parcelByApn(match.apn);
+                    const summary = (
+                      <>
+                        <strong>
+                          {match.address} · APN {match.apn}
+                        </strong>
+                        <span>{match.detail}</span>
+                      </>
+                    );
+
+                    return (
+                      <li key={`${match.apn}-${match.detail}`}>
+                        {parcel ? (
+                          <button
+                            type="button"
+                            className={styles.agentMatch}
+                            onClick={() => selectParcel(parcel.objectId)}
+                          >
+                            {summary}
+                          </button>
+                        ) : (
+                          summary
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : null}
             </div>
@@ -862,9 +965,9 @@ function SelectedParcelDetail({
         <span>APN {parcel.apn}</span>
       </div>
       <p className={styles.detailContext}>
-        {parcel.jurisdiction || "Jurisdiction unavailable"} ·{" "}
-        {roofAgeCardLabel(parcel.apn)}
+        {parcel.jurisdiction || "Jurisdiction unavailable"}
       </p>
+      <p className={styles.detailContext}>{roofAgeCardLabel(parcel.apn)}</p>
 
       {permitView.noPermitMessage ? (
         <p className={styles.detailValue}>{permitView.noPermitMessage}</p>

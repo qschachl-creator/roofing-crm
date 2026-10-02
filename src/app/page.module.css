@@ -154,6 +154,17 @@
   color: #ffffff;
 }
 
+.searchActions {
+  display: grid;
+  gap: 8px;
+  align-content: end;
+}
+
+.searchActions .primaryButton,
+.searchActions .secondaryButton {
+  width: 100%;
+}
+
 .secondaryButton {
   background: #ffffff;
   color: #17202a;
@@ -739,6 +750,35 @@ button.candidateCard:focus-visible {
 
 .agentAnswer strong {
   font-size: 13px;
+}
+
+.agentMatch,
+.leadOpen {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.leadOpen {
+  gap: 0;
+}
+
+.agentMatch:focus-visible,
+.leadOpen:focus-visible {
+  outline: 2px solid #17202a;
+  outline-offset: 2px;
+}
+
+.candidateCard .secondaryButton {
+  margin-top: 10px;
 }
 
 /* === CRM POLISH V1 END === */
