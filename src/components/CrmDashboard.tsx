@@ -668,11 +668,10 @@ export default function CrmDashboard({
             </div>
 
             <p className={styles.candidateNotice}>
-              County GIS determines geographic matches. San Jose roofing
-              permits are enriched from the city&apos;s ArcGIS source using APN.
-              Open roofing permits lists every parcel in this radius with a
-              returned open permit, including parcels below the roof-age
-              minimum. All roofing permits keeps the roof-age minimum.
+              Houses in this radius that match the current filters. Each row
+              shows the address, roof age, and matching permit. Open lists
+              houses with an open permit. All lists houses that meet the
+              roof-age minimum.
             </p>
 
             {activeSection === "leads" ? (
