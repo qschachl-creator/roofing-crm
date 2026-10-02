@@ -3,6 +3,7 @@ import {
   meetsMinimumRoofAge,
   roofAgeCardLabel,
   undashedApn,
+  type RoofAgeSnapshotRow,
 } from "./roofAgeProof.ts";
 
 export type AgentParcel = {
@@ -34,6 +35,10 @@ const ROOF_BASIS =
   "Roof age is the years since the completed re-roof date in the published snapshot.";
 const PERMIT_BASIS =
   "Open means no final date. Duration is the years since the San Jose issue date. The contractor is the name on that permit.";
+const DATA_OVERVIEW =
+  "This CRM searches Santa Clara County parcels inside a radius. Roof age comes from the published snapshot of completed San Jose re-roof permits. Roofing permits are loaded for San Jose only. Owner name, sale date, year built, and BBB rating are not in this data.";
+const NEED_A_PLACE =
+  "Drop a pin or name a Santa Clara city. Radius answers use the parcels and San Jose permits loaded for that search.";
 
 export const SANTA_CLARA_CITY_CENTERS = [
   { name: "San Jose", lat: 37.3382, lng: -121.8863 },
@@ -247,11 +252,114 @@ export type QuestionListFilters = {
   minimumOpenYears: number | null;
 };
 
+type GeneralTopic = "owner" | "bbb" | "cities" | "data" | "roof" | "permit";
+
+export function questionIsGeneral(question: string) {
+  return explanatoryTopic(question.trim()) !== null;
+}
+
+function explanatoryTopic(question: string): GeneralTopic | null {
+  if (
+    /\b(owner|owners|ownership|sale date|sold|mailing address|year built)\b/i.test(
+      question
+    )
+  ) {
+    return "owner";
+  }
+
+  if (/\bbbb\b/i.test(question)) return "bbb";
+
+  if (
+    /\b(which cities|what cities|city list|where can i search)\b/i.test(
+      question
+    )
+  ) {
+    return "cities";
+  }
+
+  if (
+    /\b(what data|what information|what can you|what do you know|what records)\b/i.test(
+      question
+    )
+  ) {
+    return "data";
+  }
+
+  const defines =
+    /\b(what is|what does|how is|how are|how do you|explain|how old)\b/i.test(
+      question
+    );
+  const lists = /\b(show|list|find|which)\b/i.test(question);
+  if (defines && !lists && /\broof age\b|\broofs?\b/i.test(question)) {
+    return "roof";
+  }
+
+  if (defines && !lists && /\b(open|permits?)\b/i.test(question)) {
+    return "permit";
+  }
+
+  return null;
+}
+
+function generalAnswer(topic: GeneralTopic): AgentAnswer {
+  if (topic === "owner") {
+    return {
+      answer:
+        "Owner name, sale date, mailing address, and year built are not in the county parcel records this CRM uses.",
+      matches: [],
+    };
+  }
+
+  if (topic === "bbb") {
+    return {
+      answer: `${BBB_NOTE} No BBB score is included with the permits.`,
+      matches: [],
+    };
+  }
+
+  if (topic === "cities") {
+    const names = SANTA_CLARA_CITY_CENTERS.map((city) => city.name).join(", ");
+    return {
+      answer: `You can name these Santa Clara County cities: ${names}. You can also drop a pin. Radius choices are 1, 3, 5, 10, and 25 miles.`,
+      matches: [],
+    };
+  }
+
+  if (topic === "roof") {
+    return {
+      answer: `${ROOF_BASIS} The snapshot covers accepted completed San Jose re-roofs. A parcel with no dated replacement has no publicly available roof age. Name a city or drop a pin to list roofs inside a radius.`,
+      matches: [],
+    };
+  }
+
+  if (topic === "permit") {
+    return {
+      answer: `${PERMIT_BASIS} Open uses San Jose's active permit layer. Permits for other cities are not loaded. Name a city or drop a pin to list permits inside a radius. ${BBB_NOTE}`,
+      matches: [],
+    };
+  }
+
+  return { answer: DATA_OVERVIEW, matches: [] };
+}
+
+export function questionNeedsLoadedSearch(question: string) {
+  if (explanatoryTopic(question.trim())) return false;
+
+  const { asksOpenPermit, asksRoof } = questionIntent(question);
+  if (asksOpenPermit) return true;
+  if (!asksRoof) return false;
+
+  return /\b(within|near|around|miles?|radius|this search|this area)\b/i.test(
+    question
+  );
+}
+
 export function questionListFilters(
   question: string
 ): QuestionListFilters | null {
   const trimmed = question.trim();
   if (!trimmed) return null;
+  if (explanatoryTopic(trimmed)) return null;
   if (questionSearchPlace(trimmed).kind === "unknown") return null;
 
   const { askedYears, asksOpenPermit, asksRoof } = questionIntent(trimmed);
@@ -290,6 +398,44 @@ function loadedRadiusNote(askedMiles: number | null, loadedMiles: number) {
   return ` The loaded search covers ${mileLabel(loadedMiles)}, which is larger than the ${mileLabel(askedMiles)} asked, so this list is not limited to ${mileLabel(askedMiles)}.`;
 }
 
+function snapshotRoofAnswer(
+  question: string,
+  roofAges: Readonly<Record<string, RoofAgeSnapshotRow>> | undefined
+): AgentAnswer {
+  const minimumYears = firstQuantity(question, "year") ?? 15;
+  const rows = Object.entries(roofAges ?? {}).filter(([, row]) => {
+    return (
+      typeof row.roof_age_years === "number" &&
+      row.roof_age_years >= minimumYears
+    );
+  });
+
+  const matches = rows
+    .sort(
+      (left, right) =>
+        (right[1].roof_age_years ?? 0) - (left[1].roof_age_years ?? 0)
+    )
+    .map(([apn]) => ({
+      apn,
+      address: "Address not in the published snapshot",
+      detail: `${roofAgeCardLabel(apn)}. ${BBB_NOTE}`,
+    }));
+
+  const yearLabel = `${minimumYears} ${minimumYears === 1 ? "year" : "years"}`;
+  const countLabel =
+    matches.length === 1
+      ? "1 parcel in the published San Jose snapshot has"
+      : `${matches.length} parcels in the published San Jose snapshot have`;
+
+  return {
+    answer:
+      matches.length > 0
+        ? `${countLabel} a roof age of at least ${yearLabel}. This is not a map-radius search, and the snapshot does not include street addresses. ${ROOF_BASIS} ${BBB_NOTE}`
+        : `No parcel in the published San Jose snapshot has a roof age of at least ${yearLabel}. This is not a map-radius search. ${ROOF_BASIS} ${BBB_NOTE}`,
+    matches,
+  };
+}
+
 function parcelForPermit(
   parcels: readonly AgentParcel[],
   apn: string
@@ -309,16 +455,21 @@ export function answerRoofingQuestion(
     permitStatus?: "open" | "all" | null;
     truncated?: boolean;
     now?: number;
+    roofAges?: Readonly<Record<string, RoofAgeSnapshotRow>>;
   }
 ): AgentAnswer {
   const trimmed = question.trim();
 
   if (!trimmed) {
     return {
-      answer: "Ask about roofs or open permits in the current search.",
+      answer:
+        "Ask a general question about the roof-age snapshot or San Jose permits, or name a city to search a radius.",
       matches: [],
     };
   }
+
+  const topic = explanatoryTopic(trimmed);
+  if (topic) return generalAnswer(topic);
 
   const place = questionSearchPlace(trimmed);
   if (place.kind === "unknown") {
@@ -329,11 +480,21 @@ export function answerRoofingQuestion(
   }
 
   if (!input.hasSearched || input.radiusMiles === null) {
-    return {
-      answer:
-        "Search a map radius first. Answers use the parcels and permits already loaded for that search.",
-      matches: [],
-    };
+    const { asksOpenPermit, asksRoof } = questionIntent(trimmed);
+    if (asksRoof && !questionNeedsLoadedSearch(trimmed)) {
+      return snapshotRoofAnswer(trimmed, input.roofAges);
+    }
+
+    if (asksOpenPermit || asksRoof) {
+      return {
+        answer: asksRoof
+          ? `${NEED_A_PLACE} ${ROOF_BASIS}`
+          : `${NEED_A_PLACE} ${PERMIT_BASIS}`,
+        matches: [],
+      };
+    }
+
+    return { answer: DATA_OVERVIEW, matches: [] };
   }
 
   const askedMiles = firstQuantity(trimmed, "mile");

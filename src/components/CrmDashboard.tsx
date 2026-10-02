@@ -5,7 +5,9 @@ import MapClient from "./MapClient";
 import styles from "@/app/page.module.css";
 import {
   answerRoofingQuestion,
+  questionIsGeneral,
   questionListFilters,
+  questionNeedsLoadedSearch,
   questionSearchPlace,
 } from "@/lib/agentQuery";
 import {
@@ -436,6 +438,22 @@ export default function CrmDashboard({
     const place = questionSearchPlace(agentQuestion);
     setActiveSection("agent");
 
+    if (questionIsGeneral(agentQuestion)) {
+      setAgentAnswer(
+        answerRoofingQuestion(agentQuestion, {
+          parcels,
+          permits: roofingPermits,
+          radiusMiles: hasSearched ? radiusMiles : null,
+          hasSearched,
+          permitError,
+          permitStatus,
+          truncated: mapTruncated,
+          roofAges: roofAgeByApn,
+        })
+      );
+      return;
+    }
+
     if (place.kind === "unknown") {
       setAgentAnswer(
         answerRoofingQuestion(agentQuestion, {
@@ -446,12 +464,15 @@ export default function CrmDashboard({
           permitError,
           permitStatus,
           truncated: mapTruncated,
+          roofAges: roofAgeByApn,
         })
       );
       return;
     }
 
-    const filters = applyQuestionFilters(agentQuestion);
+    const filters = questionNeedsLoadedSearch(agentQuestion)
+      ? applyQuestionFilters(agentQuestion)
+      : null;
     const status = filters?.permitStatus ?? permitStatus;
 
     if (place.kind === "known") {
@@ -480,6 +501,7 @@ export default function CrmDashboard({
           permitError: loaded.permitError,
           permitStatus: status,
           truncated: loaded.truncated,
+          roofAges: roofAgeByApn,
         })
       );
       return;
@@ -505,6 +527,7 @@ export default function CrmDashboard({
         permitError: permitErrorForAnswer,
         permitStatus: status,
         truncated: mapTruncated,
+        roofAges: roofAgeByApn,
       })
     );
   }
@@ -1039,7 +1062,7 @@ export default function CrmDashboard({
             <p className={styles.eyebrow}>Agent</p>
             <h3>Ask about roofing opportunities</h3>
             <p className={styles.subtle}>
-              It answers roof-age and open-permit questions from the loaded search.
+              It answers questions about the published roof-age snapshot and San Jose permits. Name a city or drop a pin to limit the list to a radius.
             </p>
           </div>
 
@@ -1095,8 +1118,7 @@ export default function CrmDashboard({
             </div>
           ) : (
             <p className={styles.pendingNote}>
-              Answers use the parcels and permits loaded for the current
-              radius search.
+              General questions use the published snapshot. A radius list needs a city name or a pin.
             </p>
           )}
         </section>

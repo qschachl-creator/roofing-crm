@@ -76,7 +76,77 @@ test("agent requires a radius search before answering", () => {
   );
 
   assert.equal(answer.matches.length, 0);
-  assert.match(answer.answer, /Search a map radius first/);
+  assert.match(answer.answer, /Drop a pin or name a Santa Clara city/);
+});
+
+test("general questions answer without a pin", () => {
+  const data = answerRoofingQuestion("What data do you have?", {
+    parcels: [],
+    permits: [],
+    radiusMiles: null,
+    hasSearched: false,
+    now: NOW,
+  });
+  assert.equal(data.matches.length, 0);
+  assert.match(data.answer, /published snapshot of completed San Jose re-roof permits/);
+  assert.match(data.answer, /BBB rating are not in this data/);
+  assert.equal(data.answer.includes("Drop a pin"), false);
+
+  const roof = answerRoofingQuestion("What is roof age?", {
+    parcels: [],
+    permits: [],
+    radiusMiles: null,
+    hasSearched: false,
+    now: NOW,
+  });
+  assert.match(roof.answer, /years since the completed re-roof date/);
+
+  const older = answerRoofingQuestion("Which roofs are older than 15 years?", {
+    parcels: [],
+    permits: [],
+    radiusMiles: null,
+    hasSearched: false,
+    now: NOW,
+    roofAges: {
+      "67620085": {
+        parcel_identifier: "67620085",
+        builtYear: null,
+        roof_date: "2010-06-01",
+        roof_age_years: 16,
+        roof_age_source: "permit_updated",
+        roof_age_confidence: "high",
+        roof_age_permit_id: "2010-012446-RS",
+        roof_age_eligibility_reason: "accepted_completed_primary_roof_replacement",
+        olderThan15Years: true,
+      },
+      "09241022": {
+        parcel_identifier: "09241022",
+        builtYear: null,
+        roof_date: "2026-09-12",
+        roof_age_years: 0,
+        roof_age_source: "permit_updated",
+        roof_age_confidence: "high",
+        roof_age_permit_id: "2026-135571-RS",
+        roof_age_eligibility_reason: "accepted_completed_primary_roof_replacement",
+        olderThan15Years: false,
+      },
+    },
+  });
+  assert.deepEqual(
+    older.matches.map((match) => match.apn),
+    ["67620085"]
+  );
+  assert.match(older.answer, /not a map-radius search/);
+  assert.match(older.matches[0].detail, /16 years old/);
+
+  const owner = answerRoofingQuestion("Who is the owner?", {
+    parcels: [],
+    permits: [],
+    radiusMiles: null,
+    hasSearched: false,
+    now: NOW,
+  });
+  assert.match(owner.answer, /Owner name, sale date/);
 });
 
 test("agent lists open permits older than five years in the loaded search", () => {
@@ -173,7 +243,7 @@ test("a known city resolves to coordinates and an unknown city does not", () => 
   assert.equal(refused.matches.length, 0);
   assert.match(refused.answer, /Oakland is not in the Santa Clara County city list/);
   assert.match(refused.answer, /no search was run/);
-  assert.equal(refused.answer.includes("Search a map radius first"), false);
+  assert.equal(refused.answer.includes("Drop a pin or name a Santa Clara city"), false);
 
   assert.match(dashboardSource, /questionSearchPlace\(agentQuestion\)/);
   assert.match(dashboardSource, /place\.kind === "known"/);
@@ -335,7 +405,7 @@ test("agent match clicks select the loaded parcel and copy is present tense", ()
   assert.equal(dashboardSource.includes("RAG agent"), false);
   assert.match(
     dashboardSource,
-    /It answers roof-age and open-permit questions from the loaded search\./
+    /It answers questions about the published roof-age snapshot and San Jose permits/
   );
   assert.equal(
     dashboardSource.includes("Natural-language queries will retrieve"),
