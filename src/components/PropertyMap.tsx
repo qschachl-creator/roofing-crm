@@ -83,8 +83,10 @@ function PinController({
 
 function RecenterMap({
   searchCenter,
+  radiusMeters,
 }: {
   searchCenter: SearchCenter | null;
+  radiusMeters: number;
 }) {
   const map = useMap();
   const latitude = searchCenter?.lat;
@@ -95,8 +97,9 @@ function RecenterMap({
       return;
     }
 
-    map.flyTo([latitude, longitude], 13);
-  }, [map, latitude, longitude]);
+    const circleBounds = L.latLng(latitude, longitude).toBounds(radiusMeters * 2);
+    map.flyToBounds(circleBounds, { padding: [28, 28] });
+  }, [map, latitude, longitude, radiusMeters]);
 
   return null;
 }
@@ -199,7 +202,7 @@ export default function PropertyMap({
         />
 
         <PinController onPin={onSearchCenterChange} />
-        <RecenterMap searchCenter={searchCenter} />
+        <RecenterMap searchCenter={searchCenter} radiusMeters={radiusMeters} />
 
         {searchCenter ? (
           <SearchOverlay

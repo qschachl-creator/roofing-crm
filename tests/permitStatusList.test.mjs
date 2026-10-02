@@ -296,6 +296,9 @@ test("selected parcel view shows permit status, duration, contractor, and unavai
   assert.match(dashboardSource, /Reset pin/);
   assert.match(mapSource, /L\.DomEvent\.stop\(event\)/);
   assert.match(mapSource, /isParcelDotClick\(event\)/);
+  assert.match(mapSource, /toBounds\(radiusMeters \* 2\)/);
+  assert.match(mapSource, /flyToBounds\(circleBounds/);
+  assert.equal(mapSource.includes("flyTo([latitude, longitude], 13)"), false);
   assert.match(dashboardSource, /Back to radius list/);
   assert.match(dashboardSource, /setSelectedObjectId\(null\)/);
   assert.equal(dashboardSource.includes("bbb.org"), false);
