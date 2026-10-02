@@ -377,12 +377,13 @@ test("the map page stops at 500 and the open-permit empty state names All", () =
   );
 
   assert.match(routeSource, /const PARCEL_PAGE_LIMIT = 500/);
-  assert.match(dashboardSource, /Showing \{parcels\.length\}/);
-  assert.match(
-    dashboardSource,
-    /This map displays a maximum of \$\{mapPageLimit\} results at a time/
+  assert.match(dashboardSource, /mapOverlaySentence\(/);
+  assert.match(dashboardSource, /drawnCount: parcels\.length/);
+  assert.match(dashboardSource, /matchCount: listedParcels\.length/);
+  assert.equal(
+    dashboardSource.includes("This map displays a maximum of"),
+    false
   );
-  assert.match(dashboardSource, /parcels\.length > mapPageLimit/);
   assert.match(dashboardSource, /Choose All roofing permits to see them/);
   assert.match(dashboardSource, /writeSavedLeads/);
 });

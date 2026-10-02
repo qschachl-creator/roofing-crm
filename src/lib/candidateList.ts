@@ -61,36 +61,112 @@ export function parcelsForPermitStatus<T extends { apn: string }>(
   });
 }
 
+function oldestOpenPermitAge(
+  permits: readonly ListedPermit[],
+  now: number
+) {
+  const byApn = new Map<string, number | null>();
+
+  for (const permit of permits) {
+    if (permit.finalDate) continue;
+
+    const age = permitAgeYears(permit.issueDate ?? null, now);
+    const current = byApn.get(permit.apn);
+    if (current === undefined) {
+      byApn.set(permit.apn, age);
+      continue;
+    }
+
+    if (age !== null && (current === null || age > current)) {
+      byApn.set(permit.apn, age);
+    }
+  }
+
+  return byApn;
+}
+
 export function sortParcelsLongOpenFirst<T extends { apn: string }>(
   parcels: readonly T[],
   permits: readonly ListedPermit[],
   now = Date.now()
 ) {
-  const longOpenApns = new Set(
-    permits
-      .filter((permit) =>
-        isLongOpenPermit(
-          permit.finalDate ?? null,
-          permitAgeYears(permit.issueDate ?? null, now)
-        )
-      )
-      .map((permit) => permit.apn)
-  );
+  const openAgeByApn = oldestOpenPermitAge(permits, now);
 
   return parcels
-    .map((parcel, index) => ({
-      parcel,
-      index,
-      rank: longOpenApns.has(parcel.apn) ? 0 : 1,
-    }))
-    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map((parcel, index) => {
+      const age = openAgeByApn.get(parcel.apn);
+      return {
+        parcel,
+        index,
+        group: age === undefined ? 2 : age === null ? 1 : 0,
+        age: age ?? 0,
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.group - right.group ||
+        right.age - left.age ||
+        left.index - right.index
+    )
     .map((entry) => entry.parcel);
+}
+
+export type ParcelMarkerKind = "match" | "longOpen" | "rest";
+
+export function parcelMarkerKind<T extends { apn: string }>(
+  parcel: { apn: string },
+  listedParcels: readonly T[],
+  permits: readonly ListedPermit[],
+  now = Date.now()
+): ParcelMarkerKind {
+  const longOpen = permits.some(
+    (permit) =>
+      permit.apn === parcel.apn &&
+      isLongOpenPermit(
+        permit.finalDate ?? null,
+        permitAgeYears(permit.issueDate ?? null, now)
+      )
+  );
+  if (longOpen) return "longOpen";
+  if (listedParcels.some((listed) => listed.apn === parcel.apn)) {
+    return "match";
+  }
+  return "rest";
+}
+
+export function mapOverlaySentence(input: {
+  drawnCount: number;
+  matchCount: number;
+  truncated: boolean;
+  pageLimit: number;
+  permitsLoading: boolean;
+}) {
+  const houseWord = input.drawnCount === 1 ? "house" : "houses";
+  const drawn = `Showing ${input.drawnCount} ${houseWord} in this radius.`;
+  const cap = input.truncated
+    ? ` The map shows the first ${input.pageLimit} parcels plus any extra parcels in the circle whose snapshot roof age is at least 15 years.`
+    : "";
+
+  if (input.permitsLoading) {
+    return `${drawn} San Jose permits are still loading.${cap}`;
+  }
+
+  const matchWord = input.matchCount === 1 ? "matches" : "match";
+  return `${drawn} ${input.matchCount} ${matchWord} the current filters.${cap}`;
 }
 
 export const BBB_RATING_UNAVAILABLE = "BBB rating unavailable";
 export const NO_PERMIT_RETURNED =
   "No roofing permit was returned for this parcel.";
+export const SAN_JOSE_PERMITS_ONLY =
+  "Roofing permits are only loaded for San Jose.";
 export const NO_CONTRACTOR_RETURNED = "No contractor was returned";
+
+export function jurisdictionLoadsRoofingPermits(
+  jurisdiction: string | null | undefined
+) {
+  return jurisdiction?.trim().toUpperCase() === "SAN JOSE";
+}
 
 export type SelectedPermitSource = {
   permitNumber: string;
@@ -99,6 +175,8 @@ export type SelectedPermitSource = {
   issueDate: string | null;
   finalDate: string | null;
   contractorName: string | null;
+  description?: string | null;
+  estimatedValue?: number | null;
 };
 
 export type SelectedPermitDetail = {
@@ -108,7 +186,25 @@ export type SelectedPermitDetail = {
   durationLabel: string;
   longOpen: boolean;
   contractorLabel: string;
+  description?: string;
+  estimatedValueLabel?: string;
+  issueDate?: string;
+  finalDate?: string;
 };
+
+function returnedText(value: string | null | undefined) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function formatEstimatedValue(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  }).format(value);
+}
 
 export type SelectedParcelPermitView = {
   permits: SelectedPermitDetail[];
@@ -118,12 +214,17 @@ export type SelectedParcelPermitView = {
 
 export function selectedParcelPermitView(
   permits: readonly SelectedPermitSource[],
-  now = Date.now()
+  now = Date.now(),
+  jurisdiction?: string | null
 ): SelectedParcelPermitView {
   if (permits.length === 0) {
     return {
       permits: [],
-      noPermitMessage: NO_PERMIT_RETURNED,
+      noPermitMessage:
+        jurisdiction !== undefined &&
+        !jurisdictionLoadsRoofingPermits(jurisdiction)
+          ? SAN_JOSE_PERMITS_ONLY
+          : NO_PERMIT_RETURNED,
       bbbRating: BBB_RATING_UNAVAILABLE,
     };
   }
@@ -132,8 +233,7 @@ export function selectedParcelPermitView(
     permits: permits.map((permit) => {
       const yearsSinceIssue = permitAgeYears(permit.issueDate, now);
       const contractor = permit.contractorName?.trim();
-
-      return {
+      const detail: SelectedPermitDetail = {
         permitNumber: permit.permitNumber,
         status:
           permit.status?.trim() || permit.layerName || "Status unavailable",
@@ -145,6 +245,21 @@ export function selectedParcelPermitView(
         longOpen: isLongOpenPermit(permit.finalDate, yearsSinceIssue),
         contractorLabel: contractor ? contractor : NO_CONTRACTOR_RETURNED,
       };
+      const description = returnedText(permit.description);
+      const issueDate = returnedText(permit.issueDate);
+      const finalDate = returnedText(permit.finalDate);
+
+      if (description) detail.description = description;
+      if (
+        typeof permit.estimatedValue === "number" &&
+        Number.isFinite(permit.estimatedValue)
+      ) {
+        detail.estimatedValueLabel = formatEstimatedValue(permit.estimatedValue);
+      }
+      if (issueDate) detail.issueDate = issueDate;
+      if (finalDate) detail.finalDate = finalDate;
+
+      return detail;
     }),
     noPermitMessage: null,
     bbbRating: BBB_RATING_UNAVAILABLE,

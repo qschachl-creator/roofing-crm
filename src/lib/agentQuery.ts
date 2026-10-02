@@ -232,6 +232,46 @@ function firstQuantity(question: string, unit: "mile" | "year") {
   return NUMBER_WORDS[words[1].toLowerCase()] ?? null;
 }
 
+function questionIntent(question: string) {
+  const askedYears = firstQuantity(question, "year");
+  const asksOpenPermit =
+    /\bopen\b/i.test(question) && /\bpermits?\b/i.test(question);
+  const asksRoof = /\broofs?\b/i.test(question) && !asksOpenPermit;
+
+  return { askedYears, asksOpenPermit, asksRoof };
+}
+
+export type QuestionListFilters = {
+  roofAge: number | null;
+  permitStatus: "open" | "all";
+  minimumOpenYears: number | null;
+};
+
+export function questionListFilters(
+  question: string
+): QuestionListFilters | null {
+  const trimmed = question.trim();
+  if (!trimmed) return null;
+  if (questionSearchPlace(trimmed).kind === "unknown") return null;
+
+  const { askedYears, asksOpenPermit, asksRoof } = questionIntent(trimmed);
+  if (!asksOpenPermit && !asksRoof) return null;
+
+  if (asksOpenPermit) {
+    return {
+      roofAge: null,
+      permitStatus: "open",
+      minimumOpenYears: askedYears,
+    };
+  }
+
+  return {
+    roofAge: askedYears ?? 15,
+    permitStatus: "all",
+    minimumOpenYears: null,
+  };
+}
+
 function mileLabel(miles: number) {
   return `${miles} ${miles === 1 ? "mile" : "miles"}`;
 }
@@ -297,10 +337,7 @@ export function answerRoofingQuestion(
   }
 
   const askedMiles = firstQuantity(trimmed, "mile");
-  const askedYears = firstQuantity(trimmed, "year");
-  const asksOpenPermit =
-    /\bopen\b/i.test(trimmed) && /\bpermits?\b/i.test(trimmed);
-  const asksRoof = /\broofs?\b/i.test(trimmed) && !asksOpenPermit;
+  const { askedYears, asksOpenPermit, asksRoof } = questionIntent(trimmed);
   const radiusNote = loadedRadiusNote(askedMiles, input.radiusMiles);
   const coverageNote = input.truncated
     ? " The county returned more parcels than this page, so this answer covers only the parcels that were loaded."

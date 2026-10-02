@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   SANTA_CLARA_CITY_CENTERS,
   answerRoofingQuestion,
+  questionListFilters,
   questionSearchPlace,
 } from "../src/lib/agentQuery.ts";
 import { installRoofAgeSnapshot } from "../src/lib/roofAgeProof.ts";
@@ -178,7 +179,15 @@ test("a known city resolves to coordinates and an unknown city does not", () => 
   assert.match(dashboardSource, /place\.kind === "known"/);
   assert.match(dashboardSource, /lat: place\.lat/);
   assert.match(dashboardSource, /lng: place\.lng/);
-  assert.match(dashboardSource, /searchProperties\(center, miles\)/);
+  assert.match(dashboardSource, /searchProperties\(center, miles, status\)/);
+
+  const askAgent = dashboardSource.slice(
+    dashboardSource.indexOf("async function askAgent"),
+    dashboardSource.indexOf("async function searchProperties")
+  );
+  const unknownAt = askAgent.indexOf('place.kind === "unknown"');
+  const searchAt = askAgent.indexOf("searchProperties(");
+  assert.equal(unknownAt >= 0 && unknownAt < searchAt, true);
 });
 
 test("agent keeps the asked city, radius, and permit age accurate", () => {
@@ -274,10 +283,59 @@ test("agent keeps the asked city, radius, and permit age accurate", () => {
   assert.match(dashboardSource, /truncated: mapTruncated/);
 });
 
-test("agent match clicks select the loaded parcel and copy is present tense", () => {
+test("question filters set roof age, permit status, and open duration", () => {
+  assert.deepEqual(
+    questionListFilters(
+      "Show open roofing permits older than five years within five miles"
+    ),
+    {
+      roofAge: null,
+      permitStatus: "open",
+      minimumOpenYears: 5,
+    }
+  );
+  assert.deepEqual(
+    questionListFilters("Which properties have roofs older than 10 years?"),
+    {
+      roofAge: 10,
+      permitStatus: "all",
+      minimumOpenYears: null,
+    }
+  );
+  assert.deepEqual(questionListFilters("Show open roofing permits"), {
+    roofAge: null,
+    permitStatus: "open",
+    minimumOpenYears: null,
+  });
+  assert.deepEqual(questionListFilters("Which properties have roofs?"), {
+    roofAge: 15,
+    permitStatus: "all",
+    minimumOpenYears: null,
+  });
+  assert.equal(
+    questionListFilters(
+      "Show open roofing permits older than five years within five miles of Oakland"
+    ),
+    null
+  );
+  assert.equal(questionListFilters(""), null);
+  assert.equal(questionListFilters("What is the contractor phone number?"), null);
+
+  assert.match(dashboardSource, /applyQuestionFilters\(agentQuestion\)/);
+  assert.match(dashboardSource, /questionListFilters\(question\)/);
+  assert.match(dashboardSource, /setRoofAge\(filters\.roofAge\)/);
+  assert.match(dashboardSource, /setPermitStatus\(filters\.permitStatus\)/);
   assert.match(
     dashboardSource,
-    /The question box answers from loaded parcels and permits\./
+    /setMinimumOpenYears\(filters\.minimumOpenYears\)/
+  );
+});
+
+test("agent match clicks select the loaded parcel and copy is present tense", () => {
+  assert.equal(dashboardSource.includes("RAG agent"), false);
+  assert.match(
+    dashboardSource,
+    /It answers roof-age and open-permit questions from the loaded search\./
   );
   assert.equal(
     dashboardSource.includes("Natural-language queries will retrieve"),

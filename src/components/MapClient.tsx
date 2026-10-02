@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { ParcelMarkerKind } from "@/lib/candidateList";
 
 export type SearchCenter = {
   lat: number;
@@ -13,6 +14,8 @@ export type ParcelMapPoint = {
   address: string;
   latitude: number | null;
   longitude: number | null;
+  roofAgeSentence: string;
+  markerKind: ParcelMarkerKind;
 };
 
 export type MapClientProps = {

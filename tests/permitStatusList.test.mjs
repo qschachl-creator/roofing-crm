@@ -7,8 +7,12 @@ import {
   NO_PERMIT_RETURNED,
   apnBatches,
   isLongOpenPermit,
+  jurisdictionLoadsRoofingPermits,
+  mapOverlaySentence,
+  parcelMarkerKind,
   parcelsForPermitStatus,
   permitAgeYears,
+  SAN_JOSE_PERMITS_ONLY,
   selectedParcelPermitView,
   sortParcelsLongOpenFirst,
 } from "../src/lib/candidateList.ts";
@@ -147,6 +151,23 @@ test("long-open parcels sort before other parcels", () => {
     sortParcelsLongOpenFirst(parcels, permits, NOW).map((parcel) => parcel.apn),
     ["long-open", "recent-open", "closed-old"]
   );
+  const nineteen = permitRow("nineteen", "2007-10-01", null);
+  const six = permitRow("six", "2020-10-01", null);
+  const nineteenAge = permitAgeYears(nineteen.issueDate, NOW);
+  const sixAge = permitAgeYears(six.issueDate, NOW);
+  assert.equal(nineteenAge !== null && nineteenAge > sixAge, true);
+  assert.deepEqual(
+    sortParcelsLongOpenFirst(
+      [
+        { apn: "six", address: "six" },
+        { apn: "none", address: "none" },
+        { apn: "nineteen", address: "nineteen" },
+      ],
+      [six, nineteen],
+      NOW
+    ).map((parcel) => parcel.apn),
+    ["nineteen", "six", "none"]
+  );
   assert.equal(
     sortParcelsLongOpenFirst(parcels, permits, NOW).some((parcel) =>
       FINISHED_ROOFS.includes(parcel.apn)
@@ -273,7 +294,11 @@ test("selected parcel view shows permit status, duration, contractor, and unavai
   );
   assert.equal(emptyView.bbbRating, "BBB rating unavailable");
 
-  assert.match(dashboardSource, /selectedParcelPermitView\(permits\)/);
+  assert.match(dashboardSource, /selectedParcelPermitView\(\s*permits/);
+  assert.match(dashboardSource, /detail\.description/);
+  assert.match(dashboardSource, /detail\.issueDate/);
+  assert.match(dashboardSource, /detail\.finalDate/);
+  assert.match(dashboardSource, /detail\.estimatedValueLabel/);
   assert.match(dashboardSource, /\{detail\.status\}/);
   assert.match(dashboardSource, /\{detail\.durationLabel\}/);
   assert.match(dashboardSource, /\{detail\.contractorLabel\}/);
@@ -302,6 +327,49 @@ test("selected parcel view shows permit status, duration, contractor, and unavai
   assert.match(dashboardSource, /Back to radius list/);
   assert.match(dashboardSource, /setSelectedObjectId\(null\)/);
   assert.equal(dashboardSource.includes("bbb.org"), false);
+
+  const described = {
+    ...permitRow("67620085", "2018-06-01", "2019-03-01"),
+    description: "Reroof | Tear off",
+    estimatedValue: 12500,
+  };
+  const describedView = selectedParcelPermitView([described], NOW);
+  assert.equal(describedView.permits[0].description, "Reroof | Tear off");
+  assert.equal(describedView.permits[0].estimatedValueLabel, "$12,500");
+  assert.equal(describedView.permits[0].issueDate, "2018-06-01");
+  assert.equal(describedView.permits[0].finalDate, "2019-03-01");
+  assert.equal(describedView.permits[0].status, "ISSUED");
+  assert.equal(describedView.bbbRating, "BBB rating unavailable");
+
+  const blankFields = {
+    ...permitRow("67620085", "2018-06-01", null),
+    description: "  ",
+    estimatedValue: null,
+    issueDate: null,
+    finalDate: null,
+  };
+  const blankView = selectedParcelPermitView([blankFields], NOW);
+  assert.equal("description" in blankView.permits[0], false);
+  assert.equal("estimatedValueLabel" in blankView.permits[0], false);
+  assert.equal("issueDate" in blankView.permits[0], false);
+  assert.equal("finalDate" in blankView.permits[0], false);
+
+  const campbell = selectedParcelPermitView([], NOW, "CAMPBELL");
+  assert.equal(campbell.noPermitMessage, SAN_JOSE_PERMITS_ONLY);
+  assert.equal(
+    campbell.noPermitMessage,
+    "Roofing permits are only loaded for San Jose."
+  );
+  assert.equal(campbell.noPermitMessage.includes("returned"), false);
+  assert.equal(jurisdictionLoadsRoofingPermits("San Jose"), true);
+  assert.equal(jurisdictionLoadsRoofingPermits(null), false);
+  const sanJoseEmpty = selectedParcelPermitView([], NOW, "SAN JOSE");
+  assert.equal(sanJoseEmpty.noPermitMessage, NO_PERMIT_RETURNED);
+  assert.match(dashboardSource, /SAN_JOSE_PERMITS_ONLY/);
+  assert.match(
+    dashboardSource,
+    /jurisdictionLoadsRoofingPermits\(parcel\.jurisdiction\)/
+  );
 });
 
 test("permit requests are sent in batches of 100", () => {
@@ -343,7 +411,9 @@ test("permit search contract stays apns and open or all", () => {
     /Choose All roofing permits to see them/
   );
 
-  const duration = dashboardSource.match(/Open duration[\s\S]*?<\/select>/);
+  const duration = dashboardSource.match(
+    /Listed only if still open at least[\s\S]*?<\/select>/
+  );
   assert.ok(duration);
   assert.deepEqual(
     [...duration[0].matchAll(/<option value="([^"]+)">([^<]*)<\/option>/g)].map(
@@ -359,4 +429,98 @@ test("permit search contract stays apns and open or all", () => {
   );
   assert.match(dashboardSource, /useState<number \| null>\(\s*null\s*\)/);
   assert.equal(dashboardSource.includes("minimumOpenYears:"), false);
+});
+
+test("map dots separate matches, long-open houses, and the rest of the page", () => {
+  const listed = [{ apn: "young-open" }, { apn: "long-open" }];
+  const permits = [
+    permitRow("young-open", "2024-06-01", null),
+    permitRow("long-open", "2010-01-01", null),
+  ];
+
+  assert.equal(
+    parcelMarkerKind({ apn: "young-open" }, listed, permits, NOW),
+    "match"
+  );
+  assert.equal(
+    parcelMarkerKind({ apn: "long-open" }, listed, permits, NOW),
+    "longOpen"
+  );
+  assert.equal(
+    parcelMarkerKind({ apn: "outside" }, listed, permits, NOW),
+    "rest"
+  );
+  assert.match(mapSource, /parcel\.roofAgeSentence/);
+  assert.match(mapSource, /\$\{parcel\.objectId\}-\$\{parcel\.markerKind\}/);
+  assert.match(mapSource, /parcel-dot-\$\{parcel\.markerKind\}/);
+  assert.match(mapSource, /#2563eb/);
+  assert.match(mapSource, /#f59e0b/);
+  assert.match(mapSource, /#e2e8f0/);
+  assert.match(mapSource, /parcel-dot /);
+
+  const counts = mapOverlaySentence({
+    drawnCount: 12,
+    matchCount: 3,
+    truncated: false,
+    pageLimit: 500,
+    permitsLoading: false,
+  });
+  assert.equal(
+    counts,
+    "Showing 12 houses in this radius. 3 match the current filters."
+  );
+  assert.equal(
+    mapOverlaySentence({
+      drawnCount: 1,
+      matchCount: 1,
+      truncated: false,
+      pageLimit: 500,
+      permitsLoading: false,
+    }),
+    "Showing 1 house in this radius. 1 matches the current filters."
+  );
+
+  const capped = mapOverlaySentence({
+    drawnCount: 512,
+    matchCount: 4,
+    truncated: true,
+    pageLimit: 500,
+    permitsLoading: false,
+  });
+  assert.match(capped, /Showing 512 houses in this radius/);
+  assert.match(capped, /4 match the current filters/);
+  assert.match(
+    capped,
+    /The map shows the first 500 parcels plus any extra parcels in the circle whose snapshot roof age is at least 15 years/
+  );
+  assert.equal(capped.includes("maximum"), false);
+
+  const loading = mapOverlaySentence({
+    drawnCount: 20,
+    matchCount: 0,
+    truncated: false,
+    pageLimit: 500,
+    permitsLoading: true,
+  });
+  assert.match(loading, /San Jose permits are still loading/);
+  assert.equal(loading.includes("match the current filters"), false);
+  assert.match(dashboardSource, /mapOverlaySentence\(/);
+  assert.match(dashboardSource, /setPermitsLoading\(true\)/);
+  assert.match(dashboardSource, /Loading permits/);
+  assert.equal(
+    dashboardSource.includes("This map displays a maximum of"),
+    false
+  );
+});
+
+test("a narrow window gives the stacked list enough height", () => {
+  const css = readFileSync(
+    new URL("../src/app/page.module.css", import.meta.url),
+    "utf8"
+  );
+  assert.match(
+    css,
+    /@media \(max-width: 640px\)[\s\S]*\.candidateList\s*\{[^}]*max-height:\s*max\(70vh,\s*520px\)/
+  );
+  assert.match(css, /\.mapFrame\s*\{[^}]*height:\s*390px/);
 });

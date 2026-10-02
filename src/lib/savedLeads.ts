@@ -14,6 +14,8 @@ export type SavedLead = {
   address: string;
   jurisdiction: string | null;
   roofAgeSentence?: string;
+  latitude?: number;
+  longitude?: number;
   permits?: SavedLeadPermit[];
 };
 
@@ -98,6 +100,16 @@ function parseSavedLead(value: unknown): SavedLead | null {
     saved.roofAgeSentence = lead.roofAgeSentence;
   }
 
+  if (
+    typeof lead.latitude === "number" &&
+    Number.isFinite(lead.latitude) &&
+    typeof lead.longitude === "number" &&
+    Number.isFinite(lead.longitude)
+  ) {
+    saved.latitude = lead.latitude;
+    saved.longitude = lead.longitude;
+  }
+
   if (Array.isArray(lead.permits)) {
     saved.permits = lead.permits.flatMap((permit) => {
       const parsed = parseSavedPermit(permit);
@@ -128,4 +140,41 @@ function parseSavedPermit(value: unknown): SavedLeadPermit | null {
     contractor: permit.contractor,
     longOpen: permit.longOpen === true,
   };
+}
+
+function csvCell(value: string) {
+  if (/[",\r\n]/.test(value)) {
+    return `"${value.replaceAll('"', '""')}"`;
+  }
+
+  return value;
+}
+
+export function savedLeadsCsv(leads: readonly SavedLead[]) {
+  const rows = [
+    ["address", "roof age", "permit number", "status", "duration", "contractor"],
+  ];
+
+  for (const lead of leads) {
+    const roofAge = lead.roofAgeSentence ?? "";
+    const permits = lead.permits ?? [];
+
+    if (permits.length === 0) {
+      rows.push([lead.address, roofAge, "", "", "", ""]);
+      continue;
+    }
+
+    for (const permit of permits) {
+      rows.push([
+        lead.address,
+        roofAge,
+        permit.permitNumber,
+        permit.status,
+        permit.openDuration,
+        permit.contractor,
+      ]);
+    }
+  }
+
+  return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }

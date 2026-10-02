@@ -1,15 +1,20 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import MapClient from "./MapClient";
 import styles from "@/app/page.module.css";
 import {
   answerRoofingQuestion,
+  questionListFilters,
   questionSearchPlace,
 } from "@/lib/agentQuery";
 import {
   apnBatches,
+  jurisdictionLoadsRoofingPermits,
+  mapOverlaySentence,
+  parcelMarkerKind,
   parcelsForPermitStatus,
+  SAN_JOSE_PERMITS_ONLY,
   selectedParcelPermitView,
   sortParcelsLongOpenFirst,
 } from "@/lib/candidateList";
@@ -23,11 +28,15 @@ import {
 } from "@/lib/roofAgeProof";
 import {
   readSavedLeads,
+  savedLeadsCsv,
   savedLeadsServerSnapshot,
   subscribeSavedLeads,
   writeSavedLeads,
   type SavedLead,
 } from "@/lib/savedLeads";
+
+const ROOF_AGE_CHOICES = [10, 15, 20, 25];
+const OPEN_YEAR_CHOICES = [5, 10, 15, 20];
 
 type SearchCenter = {
   lat: number;
@@ -108,6 +117,8 @@ export default function CrmDashboard({
   const [searchCenter, setSearchCenter] = useState<SearchCenter | null>(null);
   const [parcels, setParcels] = useState<ParcelResult[]>([]);
   const [roofingPermits, setRoofingPermits] = useState<RoofingPermit[]>([]);
+  const [permitsLoading, setPermitsLoading] = useState(false);
+  const permitRequestId = useRef(0);
   const [permitError, setPermitError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -250,11 +261,18 @@ export default function CrmDashboard({
   }
 
   async function loadPermits(apns: string[], status: "open" | "all") {
+    const requestId = ++permitRequestId.current;
+
     if (apns.length === 0) {
+      setPermitsLoading(false);
       setRoofingPermits([]);
       setPermitError(null);
       return { permits: [] as RoofingPermit[], error: null as string | null };
     }
+
+    setPermitsLoading(true);
+    setRoofingPermits([]);
+    setPermitError(null);
 
     try {
       const batches = await Promise.all(
@@ -286,6 +304,9 @@ export default function CrmDashboard({
       );
 
       const permits = batches.flat();
+      if (requestId !== permitRequestId.current) {
+        return { permits, error: null as string | null };
+      }
       setRoofingPermits(permits);
       setPermitError(null);
       return { permits, error: null as string | null };
@@ -294,9 +315,16 @@ export default function CrmDashboard({
         permitFailure instanceof Error
           ? permitFailure.message
           : "Permit enrichment failed.";
+      if (requestId !== permitRequestId.current) {
+        return { permits: [] as RoofingPermit[], error: message };
+      }
       setRoofingPermits([]);
       setPermitError(message);
       return { permits: [] as RoofingPermit[], error: message };
+    } finally {
+      if (requestId === permitRequestId.current) {
+        setPermitsLoading(false);
+      }
     }
   }
 
@@ -322,37 +350,109 @@ export default function CrmDashboard({
 
   function saveLead(parcel: ParcelResult) {
     if (leads.some((lead) => lead.apn === parcel.apn)) {
-      setActiveSection("leads");
       return;
     }
 
     const permitView = selectedParcelPermitView(
       roofingPermits.filter((permit) => permit.apn === parcel.apn)
     );
+    const lead: SavedLead = {
+      objectId: parcel.objectId,
+      apn: parcel.apn,
+      address: parcel.address,
+      jurisdiction: parcel.jurisdiction,
+      roofAgeSentence: roofAgeCardLabel(parcel.apn),
+      permits: permitView.permits.map((detail) => ({
+        permitNumber: detail.permitNumber,
+        status: detail.status,
+        openDuration: detail.durationLabel,
+        contractor: detail.contractorLabel,
+        longOpen: detail.longOpen,
+      })),
+    };
 
-    writeSavedLeads([
-      ...leads,
-      {
-        objectId: parcel.objectId,
-        apn: parcel.apn,
-        address: parcel.address,
-        jurisdiction: parcel.jurisdiction,
-        roofAgeSentence: roofAgeCardLabel(parcel.apn),
-        permits: permitView.permits.map((detail) => ({
-          permitNumber: detail.permitNumber,
-          status: detail.status,
-          openDuration: detail.durationLabel,
-          contractor: detail.contractorLabel,
-          longOpen: detail.longOpen,
-        })),
-      },
-    ]);
-    setActiveSection("leads");
+    if (parcel.latitude !== null && parcel.longitude !== null) {
+      lead.latitude = parcel.latitude;
+      lead.longitude = parcel.longitude;
+    }
+
+    writeSavedLeads([...leads, lead]);
+  }
+
+  function downloadSavedLeads() {
+    const csv = savedLeadsCsv(
+      leads.map((lead) => ({
+        ...lead,
+        roofAgeSentence: lead.roofAgeSentence ?? roofAgeCardLabel(lead.apn),
+      }))
+    );
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" })
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "saved-leads.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function openSavedLead(lead: SavedLead) {
+    const parcel = parcelForSavedLead(lead);
+    if (parcel) {
+      selectParcel(parcel.objectId);
+      return;
+    }
+
+    if (lead.latitude === undefined || lead.longitude === undefined) return;
+
+    const center = { lat: lead.latitude, lng: lead.longitude };
+    updateSearchCenter(center);
+    const loaded = await searchProperties(center, radiusMiles);
+    if (!loaded.ok) return;
+
+    const found = loaded.parcels.find(
+      (item) => undashedApn(item.apn) === undashedApn(lead.apn)
+    );
+    if (!found) return;
+
+    setSelectedObjectId(found.objectId);
+    setActiveSection("explore");
+  }
+
+  function applyQuestionFilters(question: string) {
+    const filters = questionListFilters(question);
+    if (!filters) return null;
+
+    if (filters.roofAge !== null) setRoofAge(filters.roofAge);
+    setPermitStatus(filters.permitStatus);
+    setMinimumOpenYears(filters.minimumOpenYears);
+    setSelectedObjectId(null);
+    return filters;
   }
 
   async function askAgent() {
     const place = questionSearchPlace(agentQuestion);
     setActiveSection("agent");
+
+    if (place.kind === "unknown") {
+      setAgentAnswer(
+        answerRoofingQuestion(agentQuestion, {
+          parcels,
+          permits: roofingPermits,
+          radiusMiles: hasSearched ? radiusMiles : null,
+          hasSearched,
+          permitError,
+          permitStatus,
+          truncated: mapTruncated,
+        })
+      );
+      return;
+    }
+
+    const filters = applyQuestionFilters(agentQuestion);
+    const status = filters?.permitStatus ?? permitStatus;
 
     if (place.kind === "known") {
       const miles = place.radiusMiles ?? radiusMiles;
@@ -362,7 +462,7 @@ export default function CrmDashboard({
       setLocationMessage(
         `Search center: ${place.name} · ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`
       );
-      const loaded = await searchProperties(center, miles);
+      const loaded = await searchProperties(center, miles, status);
       if (!loaded.ok) {
         setAgentAnswer({
           answer: loaded.error ?? "Parcel search failed.",
@@ -378,21 +478,32 @@ export default function CrmDashboard({
           radiusMiles: miles,
           hasSearched: true,
           permitError: loaded.permitError,
-          permitStatus,
+          permitStatus: status,
           truncated: loaded.truncated,
         })
       );
       return;
     }
 
+    let permitsForAnswer = roofingPermits;
+    let permitErrorForAnswer = permitError;
+    if (hasSearched && filters && filters.permitStatus !== permitStatus) {
+      const loadedPermits = await loadPermits(
+        sanJoseApnsFrom(parcels),
+        status
+      );
+      permitsForAnswer = loadedPermits.permits;
+      permitErrorForAnswer = loadedPermits.error;
+    }
+
     setAgentAnswer(
       answerRoofingQuestion(agentQuestion, {
         parcels,
-        permits: roofingPermits,
+        permits: permitsForAnswer,
         radiusMiles: hasSearched ? radiusMiles : null,
         hasSearched,
-        permitError,
-        permitStatus,
+        permitError: permitErrorForAnswer,
+        permitStatus: status,
         truncated: mapTruncated,
       })
     );
@@ -400,7 +511,8 @@ export default function CrmDashboard({
 
   async function searchProperties(
     center: SearchCenter | null = searchCenter,
-    miles = radiusMiles
+    miles = radiusMiles,
+    status: "open" | "all" = permitStatus
   ) {
     if (!center) {
       return {
@@ -418,6 +530,7 @@ export default function CrmDashboard({
     setHasSearched(true);
     setSearchError(null);
     setPermitError(null);
+    setPermitsLoading(true);
     setRoofingPermits([]);
     setSelectedObjectId(null);
 
@@ -446,7 +559,7 @@ export default function CrmDashboard({
       setMapPageLimit(payload.pageLimit);
       const loadedPermits = await loadPermits(
         sanJoseApnsFrom(payload.parcels),
-        permitStatus
+        status
       );
       return {
         ok: true,
@@ -461,6 +574,7 @@ export default function CrmDashboard({
         error instanceof Error ? error.message : "Parcel search failed.";
       setParcels([]);
       setMapTruncated(false);
+      setPermitsLoading(false);
       setSearchError(message);
       return {
         ok: false,
@@ -555,6 +669,9 @@ export default function CrmDashboard({
               <option value="15">15 years</option>
               <option value="20">20 years</option>
               <option value="25">25 years</option>
+              {ROOF_AGE_CHOICES.includes(roofAge) ? null : (
+                <option value={roofAge}>{roofAge} years</option>
+              )}
             </select>
           </label>
 
@@ -572,9 +689,9 @@ export default function CrmDashboard({
           </label>
 
           <label>
-            Open duration
+            Listed only if still open at least
             <select
-              aria-label="Open duration"
+              aria-label="Listed only if still open at least"
               value={minimumOpenYears === null ? "any" : String(minimumOpenYears)}
               onChange={(event) => {
                 const value = event.target.value;
@@ -587,6 +704,12 @@ export default function CrmDashboard({
               <option value="10">10 years</option>
               <option value="15">15 years</option>
               <option value="20">20 years</option>
+              {minimumOpenYears !== null &&
+              !OPEN_YEAR_CHOICES.includes(minimumOpenYears) ? (
+                <option value={minimumOpenYears}>
+                  {minimumOpenYears} years
+                </option>
+              ) : null}
             </select>
           </label>
 
@@ -626,18 +749,30 @@ export default function CrmDashboard({
                 <MapClient
                   radiusMiles={radiusMiles}
                   searchCenter={searchCenter}
-                  parcels={parcels}
+                  parcels={parcels.map((parcel) => ({
+                    objectId: parcel.objectId,
+                    apn: parcel.apn,
+                    address: parcel.address,
+                    latitude: parcel.latitude,
+                    longitude: parcel.longitude,
+                    roofAgeSentence: roofAgeCardLabel(parcel.apn),
+                    markerKind: permitsLoading
+                      ? "rest"
+                      : parcelMarkerKind(parcel, listedParcels, roofingPermits),
+                  }))}
                   selectedObjectId={selectedObjectId}
                   onSearchCenterChange={updateSearchCenter}
                   onParcelSelect={selectParcel}
                 />
                 {hasSearched && !isSearching ? (
                   <p className={styles.mapCount}>
-                    Showing {parcels.length}{" "}
-                    {parcels.length === 1 ? "house" : "houses"} in this radius.
-                    {mapTruncated || parcels.length > mapPageLimit
-                      ? ` This map displays a maximum of ${mapPageLimit} results at a time.`
-                      : ""}
+                    {mapOverlaySentence({
+                      drawnCount: parcels.length,
+                      matchCount: listedParcels.length,
+                      truncated: mapTruncated,
+                      pageLimit: mapPageLimit,
+                      permitsLoading,
+                    })}
                   </p>
                 ) : null}
               </div>
@@ -662,17 +797,34 @@ export default function CrmDashboard({
                       : "Parcels in radius"}
                 </h3>
               </div>
-              <span className={styles.count}>
-                {activeSection === "leads" ? leads.length : listedParcels.length}
-              </span>
+              <div className={styles.panelActions}>
+                {activeSection === "leads" && leads.length > 0 ? (
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={downloadSavedLeads}
+                  >
+                    Download CSV
+                  </button>
+                ) : null}
+                <span className={styles.count}>
+                  {activeSection === "leads"
+                    ? leads.length
+                    : permitsLoading
+                      ? "…"
+                      : listedParcels.length}
+                </span>
+              </div>
             </div>
 
-            <p className={styles.candidateNotice}>
-              Houses in this radius that match the current filters. Each row
-              shows the address, roof age, and matching permit. Open lists
-              houses with an open permit. All lists houses that meet the
-              roof-age minimum.
-            </p>
+            {activeSection === "leads" || selectedParcel ? null : (
+              <p className={styles.candidateNotice}>
+                Houses in this radius that match the current filters. Each row
+                shows the address, roof age, and matching permit. Open lists
+                houses with an open permit. All lists houses that meet the
+                roof-age minimum.
+              </p>
+            )}
 
             {activeSection === "leads" ? (
               leads.length > 0 ? (
@@ -717,6 +869,11 @@ export default function CrmDashboard({
                       </>
                     );
 
+                    const canOpen =
+                      parcel !== null ||
+                      (typeof lead.latitude === "number" &&
+                        typeof lead.longitude === "number");
+
                     return (
                       <article
                         className={
@@ -726,11 +883,13 @@ export default function CrmDashboard({
                         }
                         key={lead.apn}
                       >
-                        {parcel ? (
+                        {canOpen ? (
                           <button
                             type="button"
                             className={styles.leadOpen}
-                            onClick={() => selectParcel(parcel.objectId)}
+                            onClick={() => {
+                              void openSavedLead(lead);
+                            }}
                           >
                             {summary}
                           </button>
@@ -760,6 +919,11 @@ export default function CrmDashboard({
                   </p>
                 </div>
               )
+            ) : permitsLoading ? (
+              <div className={styles.emptyState}>
+                <strong>Loading permits</strong>
+                <p>San Jose permit records are still loading.</p>
+              </div>
             ) : permitError ? (
               <p className={styles.candidateNotice}>
                 Parcel search succeeded, but permit enrichment is unavailable:
@@ -767,7 +931,7 @@ export default function CrmDashboard({
               </p>
             ) : null}
 
-            {activeSection === "leads" ? null : searchError ? (
+            {activeSection === "leads" || permitsLoading ? null : searchError ? (
               <div className={styles.emptyState}>
                 <strong>Search unavailable</strong>
                 <p>{searchError}</p>
@@ -813,7 +977,9 @@ export default function CrmDashboard({
                       <div className={styles.candidateMeta}>
                         {permitView.permits.length === 0 ? (
                           <span>
-                            Roofing permit: none returned for selected filter
+                            {jurisdictionLoadsRoofingPermits(parcel.jurisdiction)
+                              ? "Roofing permit: none returned for selected filter"
+                              : SAN_JOSE_PERMITS_ONLY}
                           </span>
                         ) : (
                           permitView.permits.map((detail) => (
@@ -870,10 +1036,10 @@ export default function CrmDashboard({
 
         <section className={styles.agentPanel} id="agent">
           <div>
-            <p className={styles.eyebrow}>RAG agent</p>
+            <p className={styles.eyebrow}>Agent</p>
             <h3>Ask about roofing opportunities</h3>
             <p className={styles.subtle}>
-              The question box answers from loaded parcels and permits.
+              It answers roof-age and open-permit questions from the loaded search.
             </p>
           </div>
 
@@ -952,7 +1118,11 @@ function SelectedParcelDetail({
   saved: boolean;
   onSave: () => void;
 }) {
-  const permitView = selectedParcelPermitView(permits);
+  const permitView = selectedParcelPermitView(
+    permits,
+    Date.now(),
+    parcel.jurisdiction
+  );
 
   return (
     <div className={styles.parcelDetail}>
@@ -1003,10 +1173,34 @@ function SelectedParcelDetail({
             <section key={detail.permitNumber} className={styles.permitDetail}>
               <h4>{detail.permitNumber}</h4>
               <dl>
+                {detail.description ? (
+                  <div>
+                    <dt>Description</dt>
+                    <dd>{detail.description}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>Permit status</dt>
                   <dd>{detail.status}</dd>
                 </div>
+                {detail.issueDate ? (
+                  <div>
+                    <dt>Issue date</dt>
+                    <dd>{detail.issueDate}</dd>
+                  </div>
+                ) : null}
+                {detail.finalDate ? (
+                  <div>
+                    <dt>Final date</dt>
+                    <dd>{detail.finalDate}</dd>
+                  </div>
+                ) : null}
+                {detail.estimatedValueLabel ? (
+                  <div>
+                    <dt>Estimated value</dt>
+                    <dd>{detail.estimatedValueLabel}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>Open duration</dt>
                   <dd>

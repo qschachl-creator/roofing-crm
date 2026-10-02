@@ -17,21 +17,26 @@ import type { MapClientProps, ParcelMapPoint, SearchCenter } from "./MapClient";
 
 const SANTA_CLARA_CENTER: LatLngExpression = [37.35, -121.95];
 
-const PARCEL_DOT_STYLE: PathOptions = {
-  color: "#334155",
-  fillColor: "#ffffff",
-  fillOpacity: 0.9,
-  weight: 2,
-  className: "parcel-dot",
-};
-
-const SELECTED_PARCEL_DOT_STYLE: PathOptions = {
-  color: "#111820",
-  fillColor: "#111820",
-  fillOpacity: 1,
-  weight: 2,
-  className: "parcel-dot",
-};
+const PARCEL_DOT_STYLES = {
+  match: {
+    color: "#1e3a8a",
+    fillColor: "#2563eb",
+    fillOpacity: 0.95,
+    weight: 2,
+  },
+  longOpen: {
+    color: "#9a3412",
+    fillColor: "#f59e0b",
+    fillOpacity: 0.95,
+    weight: 2,
+  },
+  rest: {
+    color: "#64748b",
+    fillColor: "#e2e8f0",
+    fillOpacity: 0.95,
+    weight: 2,
+  },
+} satisfies Record<ParcelMapPoint["markerKind"], PathOptions>;
 
 const RADIUS_STYLE: PathOptions = {
   color: "#111820",
@@ -151,11 +156,18 @@ function ParcelDot({
     return null;
   }
 
+  const dotStyle = PARCEL_DOT_STYLES[parcel.markerKind];
+
   return (
     <CircleMarker
       center={position}
       radius={selected ? 8 : 6}
-      pathOptions={selected ? SELECTED_PARCEL_DOT_STYLE : PARCEL_DOT_STYLE}
+      pathOptions={{
+        ...dotStyle,
+        className: `parcel-dot parcel-dot-${parcel.markerKind}`,
+        color: selected ? "#111820" : dotStyle.color,
+        weight: selected ? 3 : dotStyle.weight,
+      }}
       eventHandlers={{
         click(event) {
           L.DomEvent.stop(event);
@@ -167,6 +179,8 @@ function ParcelDot({
         <strong>APN {parcel.apn}</strong>
         <br />
         {parcel.address || "Address unavailable"}
+        <br />
+        {parcel.roofAgeSentence}
       </Tooltip>
     </CircleMarker>
   );
@@ -213,7 +227,7 @@ export default function PropertyMap({
 
         {parcels.map((parcel) => (
           <ParcelDot
-            key={parcel.objectId}
+            key={`${parcel.objectId}-${parcel.markerKind}`}
             parcel={parcel}
             selected={parcel.objectId === selectedObjectId}
             onSelect={onParcelSelect}
