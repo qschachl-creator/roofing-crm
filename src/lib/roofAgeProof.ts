@@ -25,6 +25,18 @@ export function undashedApn(apn: string) {
   return apn.replace(/-/g, "").trim();
 }
 
+export function roofAgeRowsWithDates(
+  parcels: Record<string, RoofAgeSnapshotRow>
+) {
+  const dated: Record<string, RoofAgeSnapshotRow> = {};
+
+  for (const [apn, row] of Object.entries(parcels)) {
+    if (typeof row.roof_age_years === "number") dated[apn] = row;
+  }
+
+  return dated;
+}
+
 export function installRoofAgeSnapshot(
   parcels: Record<string, RoofAgeSnapshotRow>
 ) {

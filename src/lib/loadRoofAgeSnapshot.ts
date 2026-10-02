@@ -25,7 +25,9 @@ export function loadRoofAgeSnapshot() {
   }
 
   if (!pending) {
-    pending = fetch(ROOF_AGE_SNAPSHOT_URL)
+    pending = fetch(ROOF_AGE_SNAPSHOT_URL, {
+      next: { revalidate: 86_400 },
+    })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(

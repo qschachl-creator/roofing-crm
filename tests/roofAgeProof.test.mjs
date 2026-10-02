@@ -7,6 +7,7 @@ import {
   meetsMinimumRoofAge,
   parcelsMeetingMinimumRoofAge,
   roofAgeCardLabel,
+  roofAgeRowsWithDates,
   undashedApn,
 } from "../src/lib/roofAgeProof.ts";
 import { ROOF_AGE_SNAPSHOT_PATH } from "../src/lib/roofAgeSnapshotPath.ts";
@@ -64,6 +65,13 @@ test("three proven APNs render Oracle roof-age fields", () => {
   );
 
   assert.match(dashboardSource, /\{roofAgeCardLabel\(parcel\.apn\)\}/);
+});
+
+test("the page sends only dated roof ages to the browser", () => {
+  const dated = roofAgeRowsWithDates(snapshot.parcels);
+  assert.equal(dated["68958007"], undefined);
+  assert.equal(typeof dated["67620085"].roof_age_years, "number");
+  assert.ok(Object.keys(dated).length < Object.keys(snapshot.parcels).length);
 });
 
 test("any other APN keeps the pending roof-age message", () => {
@@ -369,11 +377,12 @@ test("the map page stops at 500 and the open-permit empty state names All", () =
   );
 
   assert.match(routeSource, /const PARCEL_PAGE_LIMIT = 500/);
+  assert.match(dashboardSource, /Showing \{parcels\.length\}/);
   assert.match(
     dashboardSource,
-    /Map shows the first \{mapPageLimit\} parcels in this circle/
+    /This map displays a maximum of \$\{mapPageLimit\} results at a time/
   );
-  assert.match(dashboardSource, /The county returned more/);
+  assert.match(dashboardSource, /parcels\.length > mapPageLimit/);
   assert.match(dashboardSource, /Choose All roofing permits to see them/);
   assert.match(dashboardSource, /writeSavedLeads/);
 });

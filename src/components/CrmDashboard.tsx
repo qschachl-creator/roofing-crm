@@ -622,21 +622,26 @@ export default function CrmDashboard({
             </div>
 
             <div className={styles.mapPlaceholder}>
-              <MapClient
-                radiusMiles={radiusMiles}
-                searchCenter={searchCenter}
-                parcels={parcels}
-                selectedObjectId={selectedObjectId}
-                onSearchCenterChange={updateSearchCenter}
-                onParcelSelect={selectParcel}
-              />
+              <div className={styles.mapFrame}>
+                <MapClient
+                  radiusMiles={radiusMiles}
+                  searchCenter={searchCenter}
+                  parcels={parcels}
+                  selectedObjectId={selectedObjectId}
+                  onSearchCenterChange={updateSearchCenter}
+                  onParcelSelect={selectParcel}
+                />
+                {hasSearched && !isSearching ? (
+                  <p className={styles.mapCount}>
+                    Showing {parcels.length}{" "}
+                    {parcels.length === 1 ? "house" : "houses"} in this radius.
+                    {mapTruncated || parcels.length > mapPageLimit
+                      ? ` This map displays a maximum of ${mapPageLimit} results at a time.`
+                      : ""}
+                  </p>
+                ) : null}
+              </div>
               <span>{locationMessage}</span>
-              {hasSearched && mapTruncated ? (
-                <span>
-                  Map shows the first {mapPageLimit} parcels in this circle.
-                  The county returned more.
-                </span>
-              ) : null}
             </div>
           </section>
 
