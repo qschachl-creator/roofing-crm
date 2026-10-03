@@ -396,15 +396,19 @@ input:disabled {
 /* === CRM POLISH V1 START === */
 
 .page {
+  flex: 1;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   grid-template-columns: 220px minmax(0, 1fr);
   background: #f6f7f9;
 }
 
 .sidebar {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  min-height: 0;
+  align-self: stretch;
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
   padding: 24px 18px;
 }
 
