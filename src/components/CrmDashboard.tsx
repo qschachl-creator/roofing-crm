@@ -758,7 +758,11 @@ export default function CrmDashboard({
         </section>
 
         <div className={styles.dashboard}>
-          <section className={styles.mapPanel}>
+          <section
+            className={`${styles.mapPanel} ${
+              activeSection === "explore" ? styles.sectionFocus : ""
+            }`}
+          >
             <div className={styles.panelHeader}>
               <div>
                 <p className={styles.eyebrow}>Map</p>
@@ -803,44 +807,27 @@ export default function CrmDashboard({
             </div>
           </section>
 
+          <div className={styles.sideColumn}>
           <aside
             className={`${styles.candidatesPanel} ${
-              activeSection === "leads" ? styles.sectionFocus : ""
+              activeSection === "explore" ? styles.sectionFocus : ""
             }`}
-            id="leads"
           >
             <div className={styles.panelHeader}>
               <div>
                 <p className={styles.eyebrow}>Geographic matches</p>
                 <h3>
-                  {activeSection === "leads"
-                    ? "Saved leads"
-                    : selectedParcel
-                      ? "Selected parcel"
-                      : "Parcels in radius"}
+                  {selectedParcel ? "Selected parcel" : "Parcels in radius"}
                 </h3>
               </div>
               <div className={styles.panelActions}>
-                {activeSection === "leads" && leads.length > 0 ? (
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    onClick={downloadSavedLeads}
-                  >
-                    Download CSV
-                  </button>
-                ) : null}
                 <span className={styles.count}>
-                  {activeSection === "leads"
-                    ? leads.length
-                    : permitsLoading
-                      ? "…"
-                      : listedParcels.length}
+                  {permitsLoading ? "…" : listedParcels.length}
                 </span>
               </div>
             </div>
 
-            {activeSection === "leads" || selectedParcel ? null : (
+            {selectedParcel ? null : (
               <p className={styles.candidateNotice}>
                 Houses in this radius that match the current filters. Each row
                 shows the address, roof age, and matching permit. Open lists
@@ -849,100 +836,7 @@ export default function CrmDashboard({
               </p>
             )}
 
-            {activeSection === "leads" ? (
-              leads.length > 0 ? (
-                <div className={styles.candidateList}>
-                  {leads.map((lead) => {
-                    const parcel = parcelForSavedLead(lead);
-                    const savedPermits = lead.permits ?? [];
-                    const summary = (
-                      <>
-                        <div className={styles.candidateCardHeader}>
-                          <strong>
-                            {lead.address || "Address unavailable"}
-                          </strong>
-                          <span>APN {lead.apn}</span>
-                        </div>
-                        <p>{lead.jurisdiction || "Jurisdiction unavailable"}</p>
-                        <p>
-                          {lead.roofAgeSentence ?? roofAgeCardLabel(lead.apn)}
-                        </p>
-                        {savedPermits.length > 0 ? (
-                          <div className={styles.candidateMeta}>
-                            {savedPermits.map((permit) => (
-                              <div
-                                key={permit.permitNumber}
-                                className={styles.permitLine}
-                              >
-                                <span>
-                                  <strong>{permit.permitNumber}</strong>
-                                </span>
-                                <span>{permit.status}</span>
-                                <span>{permit.openDuration}</span>
-                                <span>{permit.contractor}</span>
-                                {permit.longOpen ? (
-                                  <span className={styles.longOpen}>
-                                    Long-open
-                                  </span>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                      </>
-                    );
-
-                    const canOpen =
-                      parcel !== null ||
-                      (typeof lead.latitude === "number" &&
-                        typeof lead.longitude === "number");
-
-                    return (
-                      <article
-                        className={
-                          savedPermits.some((permit) => permit.longOpen)
-                            ? `${styles.candidateCard} ${styles.candidateCardLongOpen}`
-                            : styles.candidateCard
-                        }
-                        key={lead.apn}
-                      >
-                        {canOpen ? (
-                          <button
-                            type="button"
-                            className={styles.leadOpen}
-                            onClick={() => {
-                              void openSavedLead(lead);
-                            }}
-                          >
-                            {summary}
-                          </button>
-                        ) : (
-                          summary
-                        )}
-                        <button
-                          type="button"
-                          className={styles.secondaryButton}
-                          onClick={() =>
-                            writeSavedLeads(
-                              leads.filter((item) => item.apn !== lead.apn)
-                            )
-                          }
-                        >
-                          Remove lead
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className={styles.emptyState}>
-                  <strong>No leads saved</strong>
-                  <p>
-                    Open a parcel from the radius list and save it as a lead.
-                  </p>
-                </div>
-              )
-            ) : permitsLoading ? (
+            {permitsLoading ? (
               <div className={styles.emptyState}>
                 <strong>Loading permits</strong>
                 <p>San Jose permit records are still loading.</p>
@@ -954,7 +848,7 @@ export default function CrmDashboard({
               </p>
             ) : null}
 
-            {activeSection === "leads" || permitsLoading ? null : searchError ? (
+            {permitsLoading ? null : searchError ? (
               <div className={styles.emptyState}>
                 <strong>Search unavailable</strong>
                 <p>{searchError}</p>
@@ -1055,9 +949,129 @@ export default function CrmDashboard({
               </div>
             )}
           </aside>
+          <aside
+            className={`${styles.leadsPanel} ${
+              activeSection === "leads" ? styles.sectionFocus : ""
+            }`}
+            id="leads"
+          >
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.eyebrow}>Saved</p>
+                <h3>Leads</h3>
+              </div>
+              <div className={styles.panelActions}>
+                {leads.length > 0 ? (
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={downloadSavedLeads}
+                  >
+                    Download CSV
+                  </button>
+                ) : null}
+                <span className={styles.count}>{leads.length}</span>
+              </div>
+            </div>
+            {leads.length > 0 ? (
+              <div className={styles.candidateList}>
+                {leads.map((lead) => {
+                  const parcel = parcelForSavedLead(lead);
+                  const savedPermits = lead.permits ?? [];
+                  const summary = (
+                    <>
+                      <div className={styles.candidateCardHeader}>
+                        <strong>
+                          {lead.address || "Address unavailable"}
+                        </strong>
+                        <span>APN {lead.apn}</span>
+                      </div>
+                      <p>{lead.jurisdiction || "Jurisdiction unavailable"}</p>
+                      <p>
+                        {lead.roofAgeSentence ?? roofAgeCardLabel(lead.apn)}
+                      </p>
+                      {savedPermits.length > 0 ? (
+                        <div className={styles.candidateMeta}>
+                          {savedPermits.map((permit) => (
+                            <div
+                              key={permit.permitNumber}
+                              className={styles.permitLine}
+                            >
+                              <span>
+                                <strong>{permit.permitNumber}</strong>
+                              </span>
+                              <span>{permit.status}</span>
+                              <span>{permit.openDuration}</span>
+                              <span>{permit.contractor}</span>
+                              {permit.longOpen ? (
+                                <span className={styles.longOpen}>
+                                  Long-open
+                                </span>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                  const canOpen =
+                    parcel !== null ||
+                    (typeof lead.latitude === "number" &&
+                      typeof lead.longitude === "number");
+
+                  return (
+                    <article
+                      className={
+                        savedPermits.some((permit) => permit.longOpen)
+                          ? `${styles.candidateCard} ${styles.candidateCardLongOpen}`
+                          : styles.candidateCard
+                      }
+                      key={lead.apn}
+                    >
+                      {canOpen ? (
+                        <button
+                          type="button"
+                          className={styles.leadOpen}
+                          onClick={() => {
+                            void openSavedLead(lead);
+                          }}
+                        >
+                          {summary}
+                        </button>
+                      ) : (
+                        summary
+                      )}
+                      <button
+                        type="button"
+                        className={styles.secondaryButton}
+                        onClick={() =>
+                          writeSavedLeads(
+                            leads.filter((item) => item.apn !== lead.apn)
+                          )
+                        }
+                      >
+                        Remove lead
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className={styles.emptyState}>
+                <strong>No leads saved</strong>
+                <p>Save a house and it will appear in this box.</p>
+              </div>
+            )}
+          </aside>
+          </div>
         </div>
 
-        <section className={styles.agentPanel} id="agent">
+        <section
+          className={`${styles.agentPanel} ${
+            activeSection === "agent" ? styles.sectionFocus : ""
+          }`}
+          id="agent"
+        >
           <div>
             <p className={styles.eyebrow}>Agent</p>
             <h3>Ask about roofing opportunities</h3>
