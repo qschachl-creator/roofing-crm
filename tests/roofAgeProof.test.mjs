@@ -424,10 +424,5 @@ test("the map page stops at 500 and the open-permit empty state names All", () =
     false
   );
   assert.match(dashboardSource, /Choose All roofing permits to see them/);
-  assert.match(dashboardSource, /showEveryHouseInRadius/);
-  assert.match(
-    dashboardSource,
-    /This list is every house the county returned for the radius/
-  );
   assert.match(dashboardSource, /writeSavedLeads/);
 });

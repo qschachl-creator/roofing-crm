@@ -165,15 +165,6 @@ export default function CrmDashboard({
     permitListed,
     roofingPermits
   );
-  const showEveryHouseInRadius =
-    hasSearched &&
-    permitStatus === "all" &&
-    minimumOpenYears === null &&
-    listedParcels.length === 0 &&
-    parcels.length > 0;
-  const sideListParcels = showEveryHouseInRadius
-    ? sortParcelsLongOpenFirst(parcels, roofingPermits)
-    : listedParcels;
   const narrowedByOpenPermits =
     hasSearched &&
     permitStatus === "open" &&
@@ -980,16 +971,17 @@ export default function CrmDashboard({
               </div>
               <div className={styles.panelActions}>
                 <span className={styles.count}>
-                  {permitsLoading ? "…" : sideListParcels.length}
+                  {permitsLoading ? "…" : listedParcels.length}
                 </span>
               </div>
             </div>
 
             {selectedParcel ? null : (
               <p className={styles.candidateNotice}>
-                {showEveryHouseInRadius
-                  ? `None of the houses in this circle have a snapshot roof age of at least ${roofAge} years. This list is every house the county returned for the radius.`
-                  : "Houses in this radius that match the current filters. Each row shows the address, roof age, and matching permit. Open lists houses with an open permit. All lists houses that meet the roof-age minimum."}
+                Houses in this radius that match the current filters. Each row
+                shows the address, roof age, and matching permit. Open lists
+                houses with an open permit. All lists houses that meet the
+                roof-age minimum.
               </p>
             )}
 
@@ -1020,9 +1012,9 @@ export default function CrmDashboard({
                 saved={leads.some((lead) => lead.apn === selectedParcel.apn)}
                 onSave={() => saveLead(selectedParcel)}
               />
-            ) : sideListParcels.length > 0 ? (
+            ) : listedParcels.length > 0 ? (
               <div className={styles.candidateList}>
-                {sideListParcels.map((parcel) => {
+                {listedParcels.map((parcel) => {
                   const permitView = selectedParcelPermitView(
                     roofingPermits.filter((permit) => permit.apn === parcel.apn)
                   );
