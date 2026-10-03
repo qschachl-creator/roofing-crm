@@ -51,6 +51,8 @@ The assignment text above is unchanged. Evidence is a file on GitHub. This repos
 
 Hosted page: [https://roofing-f1h5pe4dy-quinlen-schachle-s-projects.vercel.app](https://roofing-f1h5pe4dy-quinlen-schachle-s-projects.vercel.app). `https://roofing-crm.vercel.app` is a different application.
 
+Demo recording: [https://youtu.be/yXGMWISy2OY](https://youtu.be/yXGMWISy2OY).
+
 - **Met.** The linked file does this with the records that exist.
 - **Partial.** The linked file does the part the records support. The same cell says why the rest could not be met.
 
@@ -90,9 +92,9 @@ The five APNs with `olderThan15Years` are `duckdb.expectedApns` in [santa-clara-
 | Drop a pin or use GPS, and set a radius | Met | [`src/components/PropertyMap.tsx`](src/components/PropertyMap.tsx) and `useCurrentLocation` in [`src/components/CrmDashboard.tsx`](src/components/CrmDashboard.tsx). |
 | Show roofs older than the age threshold inside the radius | Partial | Same evidence as the roof-age acceptance row. Could not show a countywide list because the pipeline fixture is San Jose only. |
 | Highlight open permits, and put long-open permits first | Partial | `sortParcelsLongOpenFirst` in [`src/lib/candidateList.ts`](src/lib/candidateList.ts). Could not include other cities because the pipeline findings record no harvester for them. |
-| Open a property and review contractor and BBB where available | Partial | `SelectedParcelDetail` in [`src/components/CrmDashboard.tsx`](src/components/CrmDashboard.tsx). Contractor comes from the permit. BBB could not be filled: the pipeline limitations file records no free score. |
+| Open a property and review contractor and BBB where available | Partial | `SelectedParcelDetail` in [`src/components/CrmDashboard.tsx`](src/components/CrmDashboard.tsx). Contractor comes from the permit. BBB could not be filled: the [pipeline limitations file](docs/limitations.md) records no free score. |
 | Turn matches into lead records | Met | [`src/lib/savedLeads.ts`](src/lib/savedLeads.ts). |
-| Ask the agent a natural-language question and show results | Partial | [`src/lib/agentQuery.ts`](src/lib/agentQuery.ts) and [`tests/agentQuery.test.mjs`](tests/agentQuery.test.mjs). Unanswered owner, sale, year-built, and BBB questions stop at the pipeline limitations file. |
+| Ask the agent a natural-language question and show results | Partial | [`src/lib/agentQuery.ts`](src/lib/agentQuery.ts) and [`tests/agentQuery.test.mjs`](tests/agentQuery.test.mjs). Unanswered owner, sale, year-built, and BBB questions stop at the [pipeline limitations file](docs/limitations.md). |
 | Filter by roof age, permit status or open duration, and radius | Met | The four selects in [`src/components/CrmDashboard.tsx`](src/components/CrmDashboard.tsx). |
 | Show placeholder sections for later CRM work | Met | `futureNote` in [`src/components/CrmDashboard.tsx`](src/components/CrmDashboard.tsx). |
 
@@ -112,8 +114,34 @@ The pipeline story asks for six demonstration lines. This repository is the buil
 | Pipeline demonstration line | Status | Evidence |
 | --- | --- | --- |
 | Show the uploaded dataset through the UI | Partial | Roof age is the content id in [`src/lib/roofAgeSnapshotPath.ts`](src/lib/roofAgeSnapshotPath.ts). Parcel circles are the live county call in [`src/app/api/parcels/search/route.ts`](src/app/api/parcels/search/route.ts). Could not show owner or business rows: those fields are absent in [santa-clara-limitations.md](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/blob/candidate-solution/docs/santa-clara-limitations.md). |
-| Show that dataset through an agent question aimed at roofing leads | Partial | [`src/lib/agentQuery.ts`](src/lib/agentQuery.ts). Could not answer owner, sale date, year built, or BBB: same limitations file. |
+| Show that dataset through an agent question aimed at roofing leads | Partial | [`src/lib/agentQuery.ts`](src/lib/agentQuery.ts). Could not answer owner, sale date, year built, or BBB: [same limitations file](docs/limitations.md). |
 | Show that Oracle can run without carrying the infrastructure cost | Met | [santa-clara-run-manifest.json](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/blob/candidate-solution/docs/publication/santa-clara-run-manifest.json) stores the content ids and `duckdb.roofsOlderThan15Years` plus `duckdb.expectedApns`. There is no hosted database in this repository. |
 | Show public content-id publication with an artifact manifest and a second independent gateway | Partial | The same manifest lists Filebase and Pinata under `independentGatewayChecks.gateways`, with matching SHA-256 values. Could not use the two example gateways: `independentGatewayChecks.notUsed` records HTTP 429 or 403 from `ipfs.io` and `dweb.link` on 2026-10-02. This page requests the Filebase URL in [`src/lib/roofAgeSnapshotPath.ts`](src/lib/roofAgeSnapshotPath.ts). |
-| Confirm the candidate did both the Oracle work and the builder work | Partial | Pipeline files linked above are the published archive record. This repository’s files linked above are the map, list, leads, and question box. Rows the pipeline branch could not fill stay partial for the source reason in that limitations file. |
-| Pass the demo on real uploaded Santa Clara records | Partial | The roof-age artifact in the manifest is the Santa Clara file this page loads. Could not fill owner, sale date, or BBB from an upload: the limitations file says those free sources do not contain them. |
+| Confirm the candidate did both the Oracle work and the builder work | Partial | Pipeline files linked above are the published archive record. This repository’s files linked above are the map, list, leads, and question box. Rows the pipeline branch could not fill stay partial for the source reason in [that limitations file](docs/limitations.md). |
+| Pass the demo on real uploaded Santa Clara records | Partial | The roof-age artifact in the manifest is the Santa Clara file this page loads. Could not fill owner, sale date, or BBB from an upload: the [limitations file](docs/limitations.md) says those free sources do not contain them. |
+
+## Limitations
+
+The same text is in [docs/limitations.md](docs/limitations.md).
+
+A gap on the page is a record the pipeline branch does not contain. Each reason below is a file in that GitHub branch: [candidate-solution](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/tree/candidate-solution).
+
+### Roof age
+
+[san-jose-reroof-roof-age.json](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/blob/candidate-solution/fixtures/santa-clara-permits/san-jose-reroof-roof-age.json) is the San Jose re-roof extract. [santa-clara-limitations.md](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/blob/candidate-solution/docs/santa-clara-limitations.md) records 6,955 parcels, 59 completed replacements, and five roofs at 15 years or older, and records that public GIS has no year built. San Jose’s year-built file is for large buildings, and year built is not a roof date.
+
+### Permits outside San Jose
+
+[santa-clara-county-findings.md](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/blob/candidate-solution/docs/santa-clara-county-findings.md) lists the other city portals and records that no harvester was added. There is no single county permit archive. Unincorporated Accela is an application intake. Campbell and Monte Sereno are marked without historical records. Gilroy’s online file starts 2023-06-19. Sunnyvale’s portal splits around 2024-10-07. Mountain View’s older permits are in person. Saratoga’s portal is account-oriented. San Jose is the published roofing extract.
+
+### BBB rating
+
+[santa-clara-limitations.md](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/blob/candidate-solution/docs/santa-clara-limitations.md) records no free BBB bulk file. The official API needs approval and does not allow public display of complaints. A contractor name on a San Jose permit is not a score.
+
+### Owner, ten-year hold, and out-of-area owner
+
+The [same limitations file](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/blob/candidate-solution/docs/santa-clara-limitations.md) records a null owner name. Public GIS `ubcd-cewv` has no owner, mailing address, or sale date. The free Assessor sheet omits the assessee name under Government Code 6254.21 and prohibits resale. The Clerk-Recorder index has been offline since 2018. The paid Secured Master File was not purchased. BizFile does not collect property owners, and an unattended request returns Incapsula.
+
+### Example IPFS gateways
+
+[santa-clara-run-manifest.json](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/blob/candidate-solution/docs/publication/santa-clara-run-manifest.json) records Filebase and Pinata under `independentGatewayChecks.gateways`. `independentGatewayChecks.notUsed` records HTTP 429 or 403 from `ipfs.io` and `dweb.link` on 2026-10-02.
