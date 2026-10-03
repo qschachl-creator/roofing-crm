@@ -69,6 +69,40 @@
   color: #ffffff;
 }
 
+.futureItem {
+  display: grid;
+  gap: 6px;
+}
+
+.nav .futureItem button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.navLater {
+  color: #7d8b98;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav .navActive .navLater {
+  color: #c5d0da;
+}
+
+.futureNote {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #1c2630;
+  color: #d7dee6;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .sourceStatus {
   display: flex;
   align-items: center;
@@ -651,6 +685,14 @@ input:disabled {
   .nav button {
     width: auto;
     padding: 8px 11px;
+  }
+
+  .futureItem {
+    flex: 1 0 100%;
+  }
+
+  .nav .futureItem button {
+    width: 100%;
   }
 
   .sourceStatus {

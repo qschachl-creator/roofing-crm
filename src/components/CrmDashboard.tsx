@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import MapClient from "./MapClient";
 import styles from "@/app/page.module.css";
 import {
@@ -110,6 +110,9 @@ export default function CrmDashboard({
   const [activeSection, setActiveSection] = useState<
     "explore" | "leads" | "agent"
   >("explore");
+  const [futureNote, setFutureNote] = useState<
+    "campaigns" | "analytics" | null
+  >(null);
   const [radiusMiles, setRadiusMiles] = useState(5);
   const [roofAge, setRoofAge] = useState(15);
   const [permitStatus, setPermitStatus] = useState<"open" | "all">("open");
@@ -175,7 +178,27 @@ export default function CrmDashboard({
     ? (parcels.find((parcel) => parcel.objectId === selectedObjectId) ?? null)
     : null;
 
+  useEffect(() => {
+    if (futureNote === null) return;
+
+    function closeOnOtherClick(event: PointerEvent) {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-future-note]")
+      ) {
+        return;
+      }
+      setFutureNote(null);
+    }
+
+    document.addEventListener("pointerdown", closeOnOtherClick, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOtherClick, true);
+  }, [futureNote]);
+
   function navigateToSection(section: "explore" | "leads" | "agent") {
+    setFutureNote(null);
     setActiveSection(section);
     document.getElementById(section)?.scrollIntoView({
       behavior: "smooth",
@@ -640,8 +663,55 @@ export default function CrmDashboard({
           >
             Agent
           </button>
-          <button disabled>Campaigns · Coming soon</button>
-          <button disabled>Analytics · Coming soon</button>
+          <div className={styles.futureItem} data-future-note="">
+            <button
+              type="button"
+              aria-expanded={futureNote === "campaigns"}
+              className={
+                futureNote === "campaigns" ? styles.navActive : undefined
+              }
+              onClick={() =>
+                setFutureNote((current) =>
+                  current === "campaigns" ? null : "campaigns"
+                )
+              }
+            >
+              Campaigns
+              <span className={styles.navLater}>Coming soon</span>
+            </button>
+            {futureNote === "campaigns" ? (
+              <p className={styles.futureNote}>
+                A sales team would use this to turn saved houses into an
+                outreach list. They could group aging roofs and long-open
+                permits, then plan the calls or notes for that list.
+              </p>
+            ) : null}
+          </div>
+          <div className={styles.futureItem} data-future-note="">
+            <button
+              type="button"
+              aria-expanded={futureNote === "analytics"}
+              className={
+                futureNote === "analytics" ? styles.navActive : undefined
+              }
+              onClick={() =>
+                setFutureNote((current) =>
+                  current === "analytics" ? null : "analytics"
+                )
+              }
+            >
+              Analytics
+              <span className={styles.navLater}>Coming soon</span>
+            </button>
+            {futureNote === "analytics" ? (
+              <p className={styles.futureNote}>
+                A sales team would use this to see how a territory is doing.
+                They could see how many houses match the roof-age and permit
+                filters, which areas become saved leads, and where the oldest
+                roofs are, so they know where to work next.
+              </p>
+            ) : null}
+          </div>
         </nav>
 
         <div className={styles.sourceStatus}>
