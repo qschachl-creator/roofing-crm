@@ -49,7 +49,7 @@ The UI should present property and permit details, including contractor informat
 
 The assignment text above is unchanged. Evidence is a file on GitHub. This repository is [qschachl-creator/roofing-crm](https://github.com/qschachl-creator/roofing-crm/tree/candidate-solution), branch `candidate-solution`. The pipeline repository is [qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca](https://github.com/qschachl-creator/oracle-property-intelligence-platform-pipeline-santa-clara-ca/tree/candidate-solution), same branch name. A partial row says, in the Evidence column, why the missing record is not in that pipeline branch.
 
-Hosted page: [https://roofing-epkbmxen5-quinlen-schachle-s-projects.vercel.app](https://roofing-epkbmxen5-quinlen-schachle-s-projects.vercel.app). `https://roofing-crm.vercel.app` is a different application.
+Hosted page: [https://roofing-m5p5r6s3q-quinlen-schachle-s-projects.vercel.app](https://roofing-m5p5r6s3q-quinlen-schachle-s-projects.vercel.app). `https://roofing-crm.vercel.app` is a different application.
 
 - **Met.** The linked file does this with the records that exist.
 - **Partial.** The linked file does the part the records support. The same cell says why the rest could not be met.
