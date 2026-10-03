@@ -486,6 +486,14 @@ input:disabled {
 
 .dashboard {
   gap: 16px;
+  align-items: start;
+}
+
+.mainColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
 
 .mapPanel,
@@ -575,8 +583,12 @@ input:disabled {
 }
 
 .agentPanel {
-  margin-top: 16px;
+  margin-top: 0;
   padding: 16px;
+}
+
+.emptyState {
+  min-height: 180px;
 }
 
 .sideColumn {

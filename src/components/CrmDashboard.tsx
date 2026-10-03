@@ -758,6 +758,7 @@ export default function CrmDashboard({
         </section>
 
         <div className={styles.dashboard}>
+          <div className={styles.mainColumn}>
           <section
             className={`${styles.mapPanel} ${
               activeSection === "explore" ? styles.sectionFocus : ""
@@ -806,6 +807,78 @@ export default function CrmDashboard({
               <span>{locationMessage}</span>
             </div>
           </section>
+
+          <section
+            className={`${styles.agentPanel} ${
+              activeSection === "agent" ? styles.sectionFocus : ""
+            }`}
+            id="agent"
+          >
+            <div>
+              <p className={styles.eyebrow}>Agent</p>
+              <h3>Ask about roofing opportunities</h3>
+              <p className={styles.subtle}>
+                It answers questions about the published roof-age snapshot and San Jose permits. Name a city or drop a pin to limit the list to a radius.
+              </p>
+            </div>
+
+            <div className={styles.agentComposer}>
+              <input
+                aria-label="Ask the roofing intelligence agent"
+                placeholder='e.g. "Show open roofing permits older than five years within five miles"'
+                value={agentQuestion}
+                onChange={(event) => setAgentQuestion(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") askAgent();
+                }}
+              />
+              <button type="button" onClick={askAgent}>
+                Ask
+              </button>
+            </div>
+
+            {agentAnswer ? (
+              <div className={styles.agentAnswer}>
+                <p>{agentAnswer.answer}</p>
+                {agentAnswer.matches.length > 0 ? (
+                  <ul>
+                    {agentAnswer.matches.map((match) => {
+                      const parcel = parcelByApn(match.apn);
+                      const summary = (
+                        <>
+                          <strong>
+                            {match.address} · APN {match.apn}
+                          </strong>
+                          <span>{match.detail}</span>
+                        </>
+                      );
+
+                      return (
+                        <li key={`${match.apn}-${match.detail}`}>
+                          {parcel ? (
+                            <button
+                              type="button"
+                              className={styles.agentMatch}
+                              onClick={() => selectParcel(parcel.objectId)}
+                            >
+                              {summary}
+                            </button>
+                          ) : (
+                            summary
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </div>
+            ) : (
+              <p className={styles.pendingNote}>
+                General questions use the published snapshot. A radius list needs a city name or a pin.
+              </p>
+            )}
+          </section>
+          </div>
 
           <div className={styles.sideColumn}>
           <aside
@@ -1065,77 +1138,6 @@ export default function CrmDashboard({
           </aside>
           </div>
         </div>
-
-        <section
-          className={`${styles.agentPanel} ${
-            activeSection === "agent" ? styles.sectionFocus : ""
-          }`}
-          id="agent"
-        >
-          <div>
-            <p className={styles.eyebrow}>Agent</p>
-            <h3>Ask about roofing opportunities</h3>
-            <p className={styles.subtle}>
-              It answers questions about the published roof-age snapshot and San Jose permits. Name a city or drop a pin to limit the list to a radius.
-            </p>
-          </div>
-
-          <div className={styles.agentComposer}>
-            <input
-              aria-label="Ask the roofing intelligence agent"
-              placeholder='e.g. "Show open roofing permits older than five years within five miles"'
-              value={agentQuestion}
-              onChange={(event) => setAgentQuestion(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") askAgent();
-              }}
-            />
-            <button type="button" onClick={askAgent}>
-              Ask
-            </button>
-          </div>
-
-          {agentAnswer ? (
-            <div className={styles.agentAnswer}>
-              <p>{agentAnswer.answer}</p>
-              {agentAnswer.matches.length > 0 ? (
-                <ul>
-                  {agentAnswer.matches.map((match) => {
-                    const parcel = parcelByApn(match.apn);
-                    const summary = (
-                      <>
-                        <strong>
-                          {match.address} · APN {match.apn}
-                        </strong>
-                        <span>{match.detail}</span>
-                      </>
-                    );
-
-                    return (
-                      <li key={`${match.apn}-${match.detail}`}>
-                        {parcel ? (
-                          <button
-                            type="button"
-                            className={styles.agentMatch}
-                            onClick={() => selectParcel(parcel.objectId)}
-                          >
-                            {summary}
-                          </button>
-                        ) : (
-                          summary
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : null}
-            </div>
-          ) : (
-            <p className={styles.pendingNote}>
-              General questions use the published snapshot. A radius list needs a city name or a pin.
-            </p>
-          )}
-        </section>
       </section>
     </main>
   );
