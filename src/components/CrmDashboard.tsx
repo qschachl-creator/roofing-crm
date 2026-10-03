@@ -104,8 +104,10 @@ type ErrorResponse = {
 
 export default function CrmDashboard({
   roofAgeByApn,
+  parcelAddressByApn,
 }: {
   roofAgeByApn: Record<string, RoofAgeSnapshotRow>;
+  parcelAddressByApn: Record<string, string>;
 }) {
   const [activeSection, setActiveSection] = useState<
     "explore" | "leads" | "agent"
@@ -472,6 +474,7 @@ export default function CrmDashboard({
           permitStatus,
           truncated: mapTruncated,
           roofAges: roofAgeByApn,
+          addressesByApn: parcelAddressByApn,
         })
       );
       return;
@@ -488,6 +491,7 @@ export default function CrmDashboard({
           permitStatus,
           truncated: mapTruncated,
           roofAges: roofAgeByApn,
+          addressesByApn: parcelAddressByApn,
         })
       );
       return;
@@ -525,6 +529,7 @@ export default function CrmDashboard({
           permitStatus: status,
           truncated: loaded.truncated,
           roofAges: roofAgeByApn,
+          addressesByApn: parcelAddressByApn,
         })
       );
       return;
@@ -551,6 +556,7 @@ export default function CrmDashboard({
         permitStatus: status,
         truncated: mapTruncated,
         roofAges: roofAgeByApn,
+        addressesByApn: parcelAddressByApn,
       })
     );
   }

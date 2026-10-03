@@ -398,9 +398,14 @@ function loadedRadiusNote(askedMiles: number | null, loadedMiles: number) {
   return ` The loaded search covers ${mileLabel(loadedMiles)}, which is larger than the ${mileLabel(askedMiles)} asked, so this list is not limited to ${mileLabel(askedMiles)}.`;
 }
 
+const ADDRESS_NOT_IN_SNAPSHOT = "Address not in the published snapshot";
+const ADDRESS_NOT_RETURNED =
+  "Street address was not returned by Santa Clara County parcel records.";
+
 function snapshotRoofAnswer(
   question: string,
-  roofAges: Readonly<Record<string, RoofAgeSnapshotRow>> | undefined
+  roofAges: Readonly<Record<string, RoofAgeSnapshotRow>> | undefined,
+  addressesByApn?: Readonly<Record<string, string>>
 ): AgentAnswer {
   const minimumYears = firstQuantity(question, "year") ?? 15;
   const rows = Object.entries(roofAges ?? {}).filter(([, row]) => {
@@ -410,27 +415,44 @@ function snapshotRoofAnswer(
     );
   });
 
+  let located = 0;
   const matches = rows
     .sort(
       (left, right) =>
         (right[1].roof_age_years ?? 0) - (left[1].roof_age_years ?? 0)
     )
-    .map(([apn]) => ({
-      apn,
-      address: "Address not in the published snapshot",
-      detail: `${roofAgeCardLabel(apn)}. ${BBB_NOTE}`,
-    }));
+    .map(([apn]) => {
+      const fromCounty = addressesByApn?.[undashedApn(apn)];
+      if (fromCounty) located += 1;
+
+      return {
+        apn,
+        address: fromCounty
+          ? fromCounty
+          : addressesByApn
+            ? ADDRESS_NOT_RETURNED
+            : ADDRESS_NOT_IN_SNAPSHOT,
+        detail: `${roofAgeCardLabel(apn)}. ${BBB_NOTE}`,
+      };
+    });
 
   const yearLabel = `${minimumYears} ${minimumYears === 1 ? "year" : "years"}`;
   const countLabel =
     matches.length === 1
       ? "1 parcel in the published San Jose snapshot has"
       : `${matches.length} parcels in the published San Jose snapshot have`;
+  const addressNote = !addressesByApn
+    ? "The snapshot does not include street addresses."
+    : located === matches.length
+      ? "Street addresses are the situs address from Santa Clara County parcel records."
+      : located === 0
+        ? "Santa Clara County parcel records did not return street addresses for these parcels."
+        : "Street addresses are included when Santa Clara County parcel records returned one.";
 
   return {
     answer:
       matches.length > 0
-        ? `${countLabel} a roof age of at least ${yearLabel}. This is not a map-radius search, and the snapshot does not include street addresses. ${ROOF_BASIS} ${BBB_NOTE}`
+        ? `${countLabel} a roof age of at least ${yearLabel}. This is not a map-radius search. ${addressNote} ${ROOF_BASIS} ${BBB_NOTE}`
         : `No parcel in the published San Jose snapshot has a roof age of at least ${yearLabel}. This is not a map-radius search. ${ROOF_BASIS} ${BBB_NOTE}`,
     matches,
   };
@@ -456,6 +478,7 @@ export function answerRoofingQuestion(
     truncated?: boolean;
     now?: number;
     roofAges?: Readonly<Record<string, RoofAgeSnapshotRow>>;
+    addressesByApn?: Readonly<Record<string, string>>;
   }
 ): AgentAnswer {
   const trimmed = question.trim();
@@ -482,7 +505,7 @@ export function answerRoofingQuestion(
   if (!input.hasSearched || input.radiusMiles === null) {
     const { asksOpenPermit, asksRoof } = questionIntent(trimmed);
     if (asksRoof && !questionNeedsLoadedSearch(trimmed)) {
-      return snapshotRoofAnswer(trimmed, input.roofAges);
+      return snapshotRoofAnswer(trimmed, input.roofAges, input.addressesByApn);
     }
 
     if (asksOpenPermit || asksRoof) {

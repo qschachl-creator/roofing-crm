@@ -137,7 +137,39 @@ test("general questions answer without a pin", () => {
     ["67620085"]
   );
   assert.match(older.answer, /not a map-radius search/);
+  assert.match(older.answer, /does not include street addresses/);
+  assert.equal(older.matches[0].address, "Address not in the published snapshot");
   assert.match(older.matches[0].detail, /16 years old/);
+
+  const located = answerRoofingQuestion("Which roofs are older than 15 years?", {
+    parcels: [],
+    permits: [],
+    radiusMiles: null,
+    hasSearched: false,
+    now: NOW,
+    roofAges: {
+      "67620085": {
+        parcel_identifier: "67620085",
+        builtYear: null,
+        roof_date: "2010-06-01",
+        roof_age_years: 16,
+        roof_age_source: "permit_updated",
+        roof_age_confidence: "high",
+        roof_age_permit_id: "2010-012446-RS",
+        roof_age_eligibility_reason: "accepted_completed_primary_roof_replacement",
+        olderThan15Years: true,
+      },
+    },
+    addressesByApn: {
+      "67620085": "3350 KETTMANN RD, SAN JOSE CA 95121-1221",
+    },
+  });
+  assert.equal(
+    located.matches[0].address,
+    "3350 KETTMANN RD, SAN JOSE CA 95121-1221"
+  );
+  assert.match(located.answer, /situs address from Santa Clara County parcel records/);
+  assert.match(dashboardSource, /addressesByApn: parcelAddressByApn/);
 
   const owner = answerRoofingQuestion("Who is the owner?", {
     parcels: [],

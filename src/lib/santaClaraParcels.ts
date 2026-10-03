@@ -219,6 +219,35 @@ async function querySantaClaraParcels(
     });
 }
 
+export async function lookupSantaClaraParcelAddresses(
+  apns: readonly string[]
+): Promise<Record<string, string>> {
+  const quoted: string[] = [];
+  const seen = new Set<string>();
+
+  for (const apn of apns) {
+    const spelled = undashedApn(apn);
+    if (!/^\d+$/.test(spelled) || seen.has(spelled)) continue;
+    seen.add(spelled);
+    quoted.push(`'${spelled}'`);
+  }
+
+  if (quoted.length === 0) return {};
+
+  const parcels = await querySantaClaraParcels(
+    `apn in(${quoted.join(",")})`,
+    quoted.length
+  );
+  const addresses: Record<string, string> = {};
+
+  for (const parcel of parcels) {
+    if (!parcel.address) continue;
+    addresses[undashedApn(parcel.apn)] = parcel.address;
+  }
+
+  return addresses;
+}
+
 export async function searchSantaClaraParcels({
   latitude,
   longitude,

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { searchSantaClaraParcelsInRadius } from "../src/lib/santaClaraParcels.ts";
+import {
+  lookupSantaClaraParcelAddresses,
+  searchSantaClaraParcelsInRadius,
+} from "../src/lib/santaClaraParcels.ts";
 import {
   installRoofAgeSnapshot,
   meetsMinimumRoofAge,
@@ -365,6 +368,42 @@ test("a full county page reports that more parcels exist", async () => {
       result.parcels.map((parcel) => parcel.apn),
       ["111", "222"]
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("roof-age address lookup asks the county dataset by APN", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    const where = url.searchParams.get("$where") ?? "";
+    assert.equal(where.includes("within_circle"), false);
+    assert.match(where, /apn in\('67620085','46204039'\)/);
+    return Response.json([
+      {
+        objectid: "1",
+        apn: "67620085",
+        situs_house_number: "3350",
+        situs_street_name: "KETTMANN",
+        situs_street_type: "RD",
+        situs_city_name: "SAN JOSE",
+        situs_state_code: "CA",
+        situs_zip_code: "95121-1221",
+      },
+    ]);
+  };
+
+  try {
+    const addresses = await lookupSantaClaraParcelAddresses([
+      "67620085",
+      "462-04039",
+      "67620085",
+    ]);
+    assert.deepEqual(addresses, {
+      "67620085": "3350 KETTMANN RD, SAN JOSE CA 95121-1221",
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
